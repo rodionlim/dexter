@@ -128,7 +128,7 @@ class Agent:
         # Get tool schema info
         tool_description = tool.description
         tool_schema = (
-            tool.args_schema.schema()
+            tool.args_schema.model_json_schema()
             if hasattr(tool, "args_schema") and tool.args_schema
             else {}
         )
@@ -146,7 +146,6 @@ class Agent:
         try:
             response = call_llm(
                 prompt,
-                model="gpt-4.1",
                 system_prompt=get_tool_args_system_prompt(),
                 output_schema=OptimizedToolArgs,
             )

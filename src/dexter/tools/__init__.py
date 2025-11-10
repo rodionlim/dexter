@@ -1,5 +1,5 @@
-# This file makes the directory a Python package from typing_extensions import Callable
-from typing_extensions import Callable, Any
+# This file makes the directory a Python package
+from langchain_core.tools import BaseTool
 
 from dexter.tools.finance.filings import get_filings
 from dexter.tools.finance.filings import get_10K_filing_items
@@ -33,7 +33,7 @@ from dexter.tools.yfinance.estimates import yf_get_analyst_estimates
 
 AVAILABLE_DATA_PROVIDERS = ["financialdatasets", "yfinance"]
 
-TOOLS: dict[str, list[Callable[..., Any]]] = {
+TOOLS: dict[str, list[BaseTool]] = {
     "financialdatasets": [
         get_income_statements,
         get_balance_sheets,
