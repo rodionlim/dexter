@@ -18,15 +18,23 @@ from dexter.utils.ui import show_progress
 
 
 class Agent:
-    def __init__(self, max_steps: int = 20, max_steps_per_task: int = 5):
+    def __init__(
+        self,
+        max_steps: int = 20,
+        max_steps_per_task: int = 5,
+        data_source: str = "yfinance",
+    ):
         self.logger = Logger()
-        self.max_steps = max_steps            # global safety cap
+        self.max_steps = max_steps  # global safety cap
         self.max_steps_per_task = max_steps_per_task
+        self.data_source = data_source  # which toolset to use
 
     # ---------- task planning ----------
     @show_progress("Planning tasks...", "Tasks planned")
     def plan_tasks(self, query: str) -> List[Task]:
-        tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in TOOLS])
+        tool_descriptions = "\n".join(
+            [f"- {t.name}: {t.description}" for t in TOOLS[self.data_source]]
+        )
         prompt = f"""
         Given the user query: "{query}",
         Create a list of tasks to be completed.
@@ -34,12 +42,14 @@ class Agent:
         """
         system_prompt = PLANNING_SYSTEM_PROMPT.format(tools=tool_descriptions)
         try:
-            response = call_llm(prompt, system_prompt=system_prompt, output_schema=TaskList)
+            response = call_llm(
+                prompt, system_prompt=system_prompt, output_schema=TaskList
+            )
             tasks = response.tasks
         except Exception as e:
             self.logger._log(f"Planning failed: {e}")
             tasks = [Task(id=1, description=query, done=False)]
-        
+
         task_dicts = [task.dict() for task in tasks]
         self.logger.log_task_list(task_dicts)
         return tasks
@@ -55,7 +65,11 @@ class Agent:
         Based on the task and the outputs, what should be the next step?
         """
         try:
-            return call_llm(prompt, system_prompt=ACTION_SYSTEM_PROMPT, tools=TOOLS)
+            return call_llm(
+                prompt,
+                system_prompt=ACTION_SYSTEM_PROMPT,
+                tools=TOOLS[self.data_source],
+            )
         except Exception as e:
             self.logger._log(f"ask_for_actions failed: {e}")
             return AIMessage(content="Failed to get actions.")
@@ -70,7 +84,9 @@ class Agent:
         Is the task done?
         """
         try:
-            resp = call_llm(prompt, system_prompt=VALIDATION_SYSTEM_PROMPT, output_schema=IsDone)
+            resp = call_llm(
+                prompt, system_prompt=VALIDATION_SYSTEM_PROMPT, output_schema=IsDone
+            )
             return resp.done
         except:
             return False
@@ -89,7 +105,11 @@ class Agent:
         Based on the data above, is the original user query sufficiently answered?
         """
         try:
-            resp = call_llm(prompt, system_prompt=META_VALIDATION_SYSTEM_PROMPT, output_schema=IsDone)
+            resp = call_llm(
+                prompt,
+                system_prompt=META_VALIDATION_SYSTEM_PROMPT,
+                output_schema=IsDone,
+            )
             return resp.done
         except Exception as e:
             self.logger._log(f"Meta-validation failed: {e}")
@@ -97,16 +117,22 @@ class Agent:
 
     # ---------- optimize tool arguments ----------
     @show_progress("Optimizing tool call...", "")
-    def optimize_tool_args(self, tool_name: str, initial_args: dict, task_desc: str) -> dict:
+    def optimize_tool_args(
+        self, tool_name: str, initial_args: dict, task_desc: str
+    ) -> dict:
         """Optimize tool arguments based on task requirements."""
-        tool = next((t for t in TOOLS if t.name == tool_name), None)
+        tool = next((t for t in TOOLS[self.data_source] if t.name == tool_name), None)
         if not tool:
             return initial_args
-        
+
         # Get tool schema info
         tool_description = tool.description
-        tool_schema = tool.args_schema.schema() if hasattr(tool, 'args_schema') and tool.args_schema else {}
-        
+        tool_schema = (
+            tool.args_schema.schema()
+            if hasattr(tool, "args_schema") and tool.args_schema
+            else {}
+        )
+
         prompt = f"""
         Task: "{task_desc}"
         Tool: {tool_name}
@@ -118,7 +144,12 @@ class Agent:
         Pay special attention to filtering parameters that would help narrow down results to match the task.
         """
         try:
-            response = call_llm(prompt, model="gpt-4.1", system_prompt=get_tool_args_system_prompt(), output_schema=OptimizedToolArgs)
+            response = call_llm(
+                prompt,
+                model="gpt-4.1",
+                system_prompt=get_tool_args_system_prompt(),
+                output_schema=OptimizedToolArgs,
+            )
             # Handle case where LLM returns dict directly instead of OptimizedToolArgs
             if isinstance(response, dict):
                 return response if response else initial_args
@@ -130,12 +161,14 @@ class Agent:
     # ---------- tool execution ----------
     def _execute_tool(self, tool, tool_name: str, inp_args):
         """Execute a tool with progress indication."""
+
         # Create a dynamic decorator with the tool name
         @show_progress(f"Executing {tool_name}...", "")
         def run_tool():
             return tool.run(inp_args)
+
         return run_tool()
-    
+
     # ---------- confirm action ----------
     def confirm_action(self, tool: str, input_str: str) -> bool:
         # In production you'd ask the user; here we just log and auto-confirm
@@ -159,11 +192,11 @@ class Agent:
         """
         # Display the user's query
         self.logger.log_user_query(query)
-        
+
         # Initialize agent state for this run.
         step_count = 0
         last_actions = []
-        task_outputs = [] # outputs from all tasks
+        task_outputs = []  # outputs from all tasks
 
         # 1. Decompose the user query into a list of tasks.
         tasks = self.plan_tasks(query)
@@ -178,7 +211,9 @@ class Agent:
         while any(not t.done for t in tasks):
             # Global safety break.
             if step_count >= self.max_steps:
-                self.logger._log("Global max steps reached — aborting to avoid runaway loop.")
+                self.logger._log(
+                    "Global max steps reached — aborting to avoid runaway loop."
+                )
                 break
 
             # Select the next incomplete task.
@@ -187,7 +222,7 @@ class Agent:
 
             # Define per-task step variables.
             per_task_steps = 0
-            task_step_outputs = [] # outputs from a single step of a given task.
+            task_step_outputs = []  # outputs from a single step of a given task.
 
             # Loop through steps of a single task until the task is complete or the max steps are reached.
             while per_task_steps < self.max_steps_per_task:
@@ -196,8 +231,10 @@ class Agent:
                     return
 
                 # Ask the LLM for the next action to take for the current task.
-                ai_message = self.ask_for_actions(task.description, last_outputs="\n".join(task_step_outputs))
-                
+                ai_message = self.ask_for_actions(
+                    task.description, last_outputs="\n".join(task_step_outputs)
+                )
+
                 # If no tool is called, the task is considered complete.
                 if not ai_message.tool_calls:
                     task.done = True
@@ -211,10 +248,12 @@ class Agent:
 
                     tool_name = tool_call["name"]
                     initial_args = tool_call["args"]
-                    
+
                     # Refine tool arguments for better performance.
-                    optimized_args = self.optimize_tool_args(tool_name, initial_args, task.description)
-                    
+                    optimized_args = self.optimize_tool_args(
+                        tool_name, initial_args, task.description
+                    )
+
                     # Create a signature of the action to be taken.
                     action_sig = f"{tool_name}:{optimized_args}"
 
@@ -223,14 +262,23 @@ class Agent:
                     if len(last_actions) > 4:
                         last_actions = last_actions[-4:]
                     if len(set(last_actions)) == 1 and len(last_actions) == 4:
-                        self.logger._log("Detected repeating action — aborting to avoid loop.")
+                        self.logger._log(
+                            "Detected repeating action — aborting to avoid loop."
+                        )
                         return
-                    
+
                     # Execute the tool.
-                    tool_to_run = next((t for t in TOOLS if t.name == tool_name), None)
-                    if tool_to_run and self.confirm_action(tool_name, str(optimized_args)):
+                    tool_to_run = next(
+                        (t for t in TOOLS[self.data_source] if t.name == tool_name),
+                        None,
+                    )
+                    if tool_to_run and self.confirm_action(
+                        tool_name, str(optimized_args)
+                    ):
                         try:
-                            result = self._execute_tool(tool_to_run, tool_name, optimized_args)
+                            result = self._execute_tool(
+                                tool_to_run, tool_name, optimized_args
+                            )
                             self.logger.log_tool_run(optimized_args, result)
                             output = f"Output of {tool_name} with args {optimized_args}: {result}"
                             task_outputs.append(output)
@@ -251,7 +299,7 @@ class Agent:
                     task.done = True
                     self.logger.log_task_done(task.description)
                     break
-            
+
             # Global introspection: Check if the overall goal is achieved.
             if task.done and self.is_goal_achieved(query, task_outputs):
                 self.logger._log("Main goal achieved. Finalizing answer.")
@@ -261,12 +309,14 @@ class Agent:
         answer = self._generate_answer(query, task_outputs)
         self.logger.log_summary(answer)
         return answer
-    
+
     # ---------- answer generation ----------
     @show_progress("Generating answer...", "Answer ready")
     def _generate_answer(self, query: str, task_outputs: list) -> str:
         """Generate the final answer based on collected data."""
-        all_results = "\n\n".join(task_outputs) if task_outputs else "No data was collected."
+        all_results = (
+            "\n\n".join(task_outputs) if task_outputs else "No data was collected."
+        )
         answer_prompt = f"""
         Original user query: "{query}"
         
@@ -276,5 +326,9 @@ class Agent:
         Based on the data above, provide a comprehensive answer to the user's query.
         Include specific numbers, calculations, and insights.
         """
-        answer_obj = call_llm(answer_prompt, system_prompt=get_answer_system_prompt(), output_schema=Answer)
+        answer_obj = call_llm(
+            answer_prompt,
+            system_prompt=get_answer_system_prompt(),
+            output_schema=Answer,
+        )
         return answer_obj.answer

@@ -2,14 +2,16 @@
 
 Dexter is an autonomous financial research agent that thinks, plans, and learns as it works. It performs analysis using task planning, self-reflection, and real-time market data. Think Claude Code, but built specifically for financial research.
 
+This repository is a fork of https://github.com/michaelh03/dexter-free
 
 <img width="979" height="651" alt="Screenshot 2025-10-14 at 6 12 35 PM" src="https://github.com/user-attachments/assets/5a2859d4-53cf-4638-998a-15cef3c98038" />
 
 ## Overview
 
-Dexter takes complex financial questions and turns them into clear, step-by-step research plans. It runs those tasks using live market data, checks its own work, and refines the results until it has a confident, data-backed answer.  
+Dexter takes complex financial questions and turns them into clear, step-by-step research plans. It runs those tasks using live market data, checks its own work, and refines the results until it has a confident, data-backed answer.
 
 **Key Capabilities:**
+
 - **Intelligent Task Planning**: Automatically decomposes complex queries into structured research steps
 - **Autonomous Execution**: Selects and executes the right tools to gather financial data
 - **Self-Validation**: Checks its own work and iterates until tasks are complete
@@ -20,7 +22,7 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.13 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
 - OpenAI API key (get [here](https://platform.openai.com/api-keys))
 - Financial Datasets API key (get [here](https://financialdatasets.ai))
@@ -28,17 +30,20 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/virattt/dexter.git
 cd dexter
 ```
 
 2. Install dependencies with uv:
+
 ```bash
 uv sync
 ```
 
 3. Set up your environment variables:
+
 ```bash
 # Copy the example environment file
 cp env.example .env
@@ -50,20 +55,29 @@ cp env.example .env
 
 ### Usage
 
-Run Dexter in interactive mode:
+Run Dexter in interactive mode (defaults to Yahoo Finance):
+
 ```bash
 uv run dexter-agent
+```
+
+Switch to FinancialDatasets provider when you need premium data:
+
+```bash
+uv run dexter-agent --provider financialdatasets
 ```
 
 ### Example Queries
 
 Try asking Dexter questions like:
+
 - "What was Apple's revenue growth over the last 4 quarters?"
 - "Compare Microsoft and Google's operating margins for 2023"
 - "Analyze Tesla's cash flow trends over the past year"
 - "What is Amazon's debt-to-equity ratio based on recent financials?"
 
 Dexter will automatically:
+
 1. Break down your question into research tasks
 2. Fetch the necessary financial data
 3. Perform calculations and analysis
@@ -116,10 +130,8 @@ agent = Agent(
 4. Push to the branch
 5. Create a Pull Request
 
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
+**Important**: Please keep your pull requests small and focused. This will make it easier to review and merge.
 
 ## License
 
 This project is licensed under the MIT License.
-

@@ -1,5 +1,6 @@
 # This file makes the directory a Python package from typing_extensions import Callable
-from typing_extensions import Callable
+from typing_extensions import Callable, Any
+
 from dexter.tools.finance.filings import get_filings
 from dexter.tools.finance.filings import get_10K_filing_items
 from dexter.tools.finance.filings import get_10Q_filing_items
@@ -16,20 +17,53 @@ from dexter.tools.finance.estimates import get_analyst_estimates
 from dexter.tools.finance.segments import get_segmented_revenues
 from dexter.tools.search.google import search_google_news
 
-TOOLS: list[Callable[..., any]] = [
-    get_income_statements,
-    get_balance_sheets,
-    get_cash_flow_statements,
-    get_10K_filing_items,
-    get_10Q_filing_items,
-    get_8K_filing_items,
-    get_filings,
-    get_price_snapshot,
-    get_prices,
-    get_financial_metrics_snapshot,
-    get_financial_metrics,
-    get_news,
-    get_analyst_estimates,
-    get_segmented_revenues,
-    search_google_news,
-]
+from dexter.tools.yfinance.filings import yf_get_filings
+from dexter.tools.yfinance.filings import yf_get_10K_filing_items
+from dexter.tools.yfinance.filings import yf_get_10Q_filing_items
+from dexter.tools.yfinance.filings import yf_get_8K_filing_items
+from dexter.tools.yfinance.fundamentals import yf_get_income_statements
+from dexter.tools.yfinance.fundamentals import yf_get_balance_sheets
+from dexter.tools.yfinance.fundamentals import yf_get_cash_flow_statements
+from dexter.tools.yfinance.metrics import yf_get_financial_metrics_snapshot
+from dexter.tools.yfinance.metrics import yf_get_financial_metrics
+from dexter.tools.yfinance.prices import yf_get_price_snapshot
+from dexter.tools.yfinance.prices import yf_get_prices
+from dexter.tools.yfinance.news import yf_get_news
+from dexter.tools.yfinance.estimates import yf_get_analyst_estimates
+
+AVAILABLE_DATA_PROVIDERS = ["financialdatasets", "yfinance"]
+
+TOOLS: dict[str, list[Callable[..., Any]]] = {
+    "financialdatasets": [
+        get_income_statements,
+        get_balance_sheets,
+        get_cash_flow_statements,
+        get_10K_filing_items,
+        get_10Q_filing_items,
+        get_8K_filing_items,
+        get_filings,
+        get_price_snapshot,
+        get_prices,
+        get_financial_metrics_snapshot,
+        get_financial_metrics,
+        get_news,
+        get_analyst_estimates,
+        get_segmented_revenues,
+        search_google_news,
+    ],
+    "yfinance": [
+        yf_get_income_statements,
+        yf_get_balance_sheets,
+        yf_get_cash_flow_statements,
+        yf_get_10K_filing_items,
+        yf_get_10Q_filing_items,
+        yf_get_8K_filing_items,
+        yf_get_filings,
+        yf_get_price_snapshot,
+        yf_get_prices,
+        yf_get_financial_metrics_snapshot,
+        yf_get_financial_metrics,
+        yf_get_news,
+        yf_get_analyst_estimates,
+    ],
+}
