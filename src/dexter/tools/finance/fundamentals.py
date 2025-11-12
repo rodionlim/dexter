@@ -1,3 +1,4 @@
+# fmt: off
 from langchain.tools import tool
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
@@ -8,7 +9,7 @@ from dexter.tools.finance.api import call_api
 ####################################
 
 class FinancialStatementsInput(BaseModel):
-    ticker: str = Field(description="The stock ticker symbol to fetch financial statements for. For example, 'AAPL' for Apple.")
+    ticker: str = Field(description="The stock ticker symbol to fetch financial statements for. For example, 'AAPL' for Apple, 'BN4.SI for keppel corp")
     period: Literal["annual", "quarterly", "ttm"] = Field(description="The reporting period for the financial statements. 'annual' for yearly, 'quarterly' for quarterly, and 'ttm' for trailing twelve months.")
     limit: int = Field(default=10, description="The number of past financial statements to retrieve.")
     report_period_gt: Optional[str] = Field(default=None, description="Filter for financial statements with report periods after this date (YYYY-MM-DD).")

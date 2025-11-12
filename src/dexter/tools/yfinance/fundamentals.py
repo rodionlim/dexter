@@ -61,6 +61,7 @@ def yf_get_income_statements(
     hitting the FinancialDatasets API. The `period` flag selects `annual`,
     `quarterly`, or trailing-twelve-month (`ttm`) data and respects optional ISO
     date filters plus a maximum number of periods (`limit`).
+    Yahoo Finance may not have extensive historical annual/quarterly/ttm data for all tickers.
     """
     ticker_obj = get_ticker(ticker)
     frame = load_statement_frame(ticker_obj, "income_stmt", period)
@@ -93,6 +94,7 @@ def yf_get_balance_sheets(
     capital structure when the yfinance provider is selected. Supports the same
     period selection and ISO date filtering options as the income statement
     tool.
+    Yahoo Finance may not have extensive historical annual/quarterly/ttm data for all tickers.
     """
     ticker_obj = get_ticker(ticker)
     frame = load_statement_frame(ticker_obj, "balance_sheet", period)
@@ -124,6 +126,7 @@ def yf_get_cash_flow_statements(
     Ideal for questions about liquidity, free cash flow, or capital allocation
     when the agent works in `yfinance` mode. Mirrors the other financial
     statement tools in supported arguments and response shape.
+    Yahoo Finance may not have extensive historical annual/quarterly/ttm data for all tickers.
     """
     ticker_obj = get_ticker(ticker)
     frame = load_statement_frame(ticker_obj, "cashflow", period)
