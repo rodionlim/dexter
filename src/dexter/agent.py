@@ -50,7 +50,7 @@ class Agent:
             self.logger._log(f"Planning failed: {e}")
             tasks = [Task(id=1, description=query, done=False)]
 
-        task_dicts = [task.dict() for task in tasks]
+        task_dicts = [task.model_dump() for task in tasks]
         self.logger.log_task_list(task_dicts)
         return tasks
 
@@ -129,7 +129,9 @@ class Agent:
         tool_description = tool.description
         tool_schema = (
             tool.args_schema.model_json_schema()
-            if hasattr(tool, "args_schema") and tool.args_schema
+            if hasattr(tool, "args_schema")
+            and tool.args_schema
+            and isinstance(tool.args_schema, type)
             else {}
         )
 
@@ -329,5 +331,6 @@ class Agent:
             answer_prompt,
             system_prompt=get_answer_system_prompt(),
             output_schema=Answer,
+            model_type="strong",
         )
         return answer_obj.answer

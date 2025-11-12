@@ -4,7 +4,7 @@ import time
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from pydantic import BaseModel, SecretStr
-from typing import Type, List, Optional
+from typing import Type, List, Literal, Optional
 from langchain_core.tools import BaseTool
 from langchain_core.messages import AIMessage
 from openai import APIConnectionError
@@ -19,6 +19,7 @@ def call_llm(
     system_prompt: Optional[str] = None,
     output_schema: Optional[Type[BaseModel]] = None,
     tools: Optional[List[BaseTool]] = None,
+    model_type: Literal["standard", "strong"] = "standard",
 ) -> AIMessage:
     final_system_prompt = system_prompt if system_prompt else DEFAULT_SYSTEM_PROMPT
 
@@ -32,7 +33,10 @@ def call_llm(
 
     # Initialize the LLM.
     llm = ChatOpenAI(
-        model=os.getenv("OPENAI_API_MODEL", "gpt-5-nano"),
+        model=os.getenv(
+            f"OPENAI_API_{'STRONG_' if model_type.upper() == 'STRONG' else ''}MODEL",
+            "gpt-5-nano",
+        ),
         temperature=0,
         api_key=SecretStr(api_key),
     )
