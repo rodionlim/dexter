@@ -144,6 +144,7 @@ class Agent:
         
         Review the task and optimize the arguments to ensure all relevant parameters are used correctly.
         Pay special attention to filtering parameters that would help narrow down results to match the task.
+        Return the optimized arguments in JSON format.
         """
         try:
             response = call_llm(

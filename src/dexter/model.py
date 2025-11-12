@@ -45,6 +45,9 @@ def call_llm(
     runnable = llm
     if output_schema:
         runnable = llm.with_structured_output(output_schema, method="function_calling")
+        if output_schema.__name__ == "OptimizedToolArgs":
+            # For tool argument optimization, we don't need the full message
+            runnable = llm.with_structured_output(output_schema, method="json_mode")
     elif tools:
         runnable = llm.bind_tools(tools)
 
