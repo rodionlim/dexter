@@ -1,3 +1,4 @@
+# fmt: off
 import sys
 import time
 import threading
@@ -76,6 +77,9 @@ def show_progress(message: str, success_message: str = ""):
                 result = func(*args, **kwargs)
                 spinner.stop(success_message or message.replace("...", " ✓"), symbol="✓", symbol_color=Colors.GREEN)
                 return result
+            except KeyboardInterrupt:
+                spinner.stop("Interrupted", symbol="✗", symbol_color=Colors.YELLOW)
+                raise
             except Exception as e:
                 spinner.stop(f"Failed: {str(e)}", symbol="✗", symbol_color=Colors.RED)
                 raise
@@ -192,4 +196,3 @@ class UI:
     def print_warning(self, message: str):
         """Print a warning message."""
         print(f"{Colors.YELLOW}⚠ Warning:{Colors.ENDC} {message}")
-

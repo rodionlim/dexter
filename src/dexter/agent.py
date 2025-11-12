@@ -199,112 +199,116 @@ class Agent:
         last_actions = []
         task_outputs = []  # outputs from all tasks
 
-        # 1. Decompose the user query into a list of tasks.
-        tasks = self.plan_tasks(query)
+        try:
+            # 1. Decompose the user query into a list of tasks.
+            tasks = self.plan_tasks(query)
 
-        # If no tasks were created, the query is likely out of scope.
-        if not tasks:
-            answer = self._generate_answer(query, task_outputs)
-            self.logger.log_summary(answer)
-            return answer
+            # If no tasks were created, the query is likely out of scope.
+            if not tasks:
+                answer = self._generate_answer(query, task_outputs)
+                self.logger.log_summary(answer)
+                return answer
 
-        # 2. Loop through tasks until all are complete or max steps are reached.
-        while any(not t.done for t in tasks):
-            # Global safety break.
-            if step_count >= self.max_steps:
-                self.logger._log(
-                    "Global max steps reached — aborting to avoid runaway loop."
-                )
-                break
-
-            # Select the next incomplete task.
-            task = next(t for t in tasks if not t.done)
-            self.logger.log_task_start(task.description)
-
-            # Define per-task step variables.
-            per_task_steps = 0
-            task_step_outputs = []  # outputs from a single step of a given task.
-
-            # Loop through steps of a single task until the task is complete or the max steps are reached.
-            while per_task_steps < self.max_steps_per_task:
+            # 2. Loop through tasks until all are complete or max steps are reached.
+            while any(not t.done for t in tasks):
+                # Global safety break.
                 if step_count >= self.max_steps:
-                    self.logger._log("Global max steps reached — stopping.")
-                    return
-
-                # Ask the LLM for the next action to take for the current task.
-                ai_message = self.ask_for_actions(
-                    task.description, last_outputs="\n".join(task_step_outputs)
-                )
-
-                # If no tool is called, the task is considered complete.
-                if not ai_message.tool_calls:
-                    task.done = True
-                    self.logger.log_task_done(task.description)
+                    self.logger._log(
+                        "Global max steps reached — aborting to avoid runaway loop."
+                    )
                     break
 
-                # Process each tool call returned by the LLM.
-                for tool_call in ai_message.tool_calls:
+                # Select the next incomplete task.
+                task = next(t for t in tasks if not t.done)
+                self.logger.log_task_start(task.description)
+
+                # Define per-task step variables.
+                per_task_steps = 0
+                task_step_outputs = []  # outputs from a single step of a given task.
+
+                # Loop through steps of a single task until the task is complete or the max steps are reached.
+                while per_task_steps < self.max_steps_per_task:
                     if step_count >= self.max_steps:
-                        break
-
-                    tool_name = tool_call["name"]
-                    initial_args = tool_call["args"]
-
-                    # Refine tool arguments for better performance.
-                    optimized_args = self.optimize_tool_args(
-                        tool_name, initial_args, task.description
-                    )
-
-                    # Create a signature of the action to be taken.
-                    action_sig = f"{tool_name}:{optimized_args}"
-
-                    # Detect and prevent repetitive action loops.
-                    last_actions.append(action_sig)
-                    if len(last_actions) > 4:
-                        last_actions = last_actions[-4:]
-                    if len(set(last_actions)) == 1 and len(last_actions) == 4:
-                        self.logger._log(
-                            "Detected repeating action — aborting to avoid loop."
-                        )
+                        self.logger._log("Global max steps reached — stopping.")
                         return
 
-                    # Execute the tool.
-                    tool_to_run = next(
-                        (t for t in TOOLS[self.data_source] if t.name == tool_name),
-                        None,
+                    # Ask the LLM for the next action to take for the current task.
+                    ai_message = self.ask_for_actions(
+                        task.description, last_outputs="\n".join(task_step_outputs)
                     )
-                    if tool_to_run and self.confirm_action(
-                        tool_name, str(optimized_args)
-                    ):
-                        try:
-                            result = self._execute_tool(
-                                tool_to_run, tool_name, optimized_args
+
+                    # If no tool is called, the task is considered complete.
+                    if not ai_message.tool_calls:
+                        task.done = True
+                        self.logger.log_task_done(task.description)
+                        break
+
+                    # Process each tool call returned by the LLM.
+                    for tool_call in ai_message.tool_calls:
+                        if step_count >= self.max_steps:
+                            break
+
+                        tool_name = tool_call["name"]
+                        initial_args = tool_call["args"]
+
+                        # Refine tool arguments for better performance.
+                        optimized_args = self.optimize_tool_args(
+                            tool_name, initial_args, task.description
+                        )
+
+                        # Create a signature of the action to be taken.
+                        action_sig = f"{tool_name}:{optimized_args}"
+
+                        # Detect and prevent repetitive action loops.
+                        last_actions.append(action_sig)
+                        if len(last_actions) > 4:
+                            last_actions = last_actions[-4:]
+                        if len(set(last_actions)) == 1 and len(last_actions) == 4:
+                            self.logger._log(
+                                "Detected repeating action — aborting to avoid loop."
                             )
-                            self.logger.log_tool_run(optimized_args, result)
-                            output = f"Output of {tool_name} with args {optimized_args}: {result}"
-                            task_outputs.append(output)
-                            task_step_outputs.append(output)
-                        except Exception as e:
-                            self.logger._log(f"Tool execution failed: {e}")
-                            error_output = f"Error from {tool_name} with args {optimized_args}: {e}"
-                            task_outputs.append(error_output)
-                            task_step_outputs.append(error_output)
-                    else:
-                        self.logger._log(f"Invalid tool: {tool_name}")
+                            return
 
-                    step_count += 1
-                    per_task_steps += 1
+                        # Execute the tool.
+                        tool_to_run = next(
+                            (t for t in TOOLS[self.data_source] if t.name == tool_name),
+                            None,
+                        )
+                        if tool_to_run and self.confirm_action(
+                            tool_name, str(optimized_args)
+                        ):
+                            try:
+                                result = self._execute_tool(
+                                    tool_to_run, tool_name, optimized_args
+                                )
+                                self.logger.log_tool_run(optimized_args, result)
+                                output = f"Output of {tool_name} with args {optimized_args}: {result}"
+                                task_outputs.append(output)
+                                task_step_outputs.append(output)
+                            except Exception as e:
+                                self.logger._log(f"Tool execution failed: {e}")
+                                error_output = f"Error from {tool_name} with args {optimized_args}: {e}"
+                                task_outputs.append(error_output)
+                                task_step_outputs.append(error_output)
+                        else:
+                            self.logger._log(f"Invalid tool: {tool_name}")
 
-                # Task-level introspection: Check if the task is complete.
-                if self.ask_if_done(task.description, "\n".join(task_step_outputs)):
-                    task.done = True
-                    self.logger.log_task_done(task.description)
+                        step_count += 1
+                        per_task_steps += 1
+
+                    # Task-level introspection: Check if the task is complete.
+                    if self.ask_if_done(task.description, "\n".join(task_step_outputs)):
+                        task.done = True
+                        self.logger.log_task_done(task.description)
+                        break
+
+                # Global introspection: Check if the overall goal is achieved.
+                if task.done and self.is_goal_achieved(query, task_outputs):
+                    self.logger._log("Main goal achieved. Finalizing answer.")
                     break
-
-            # Global introspection: Check if the overall goal is achieved.
-            if task.done and self.is_goal_achieved(query, task_outputs):
-                self.logger._log("Main goal achieved. Finalizing answer.")
-                break
+        except KeyboardInterrupt:
+            self.logger._log("\n\nExecution interrupted by user.")
+            return
 
         # Generate the final answer from all collected tool outputs.
         answer = self._generate_answer(query, task_outputs)
