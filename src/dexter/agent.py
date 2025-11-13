@@ -62,6 +62,7 @@ class Agent:
         We are working on: "{task_desc}".
         Here is a history of tool outputs from the session so far: {last_outputs}
 
+        For yahoo finance (yf_ prefixed tools), if a tool call has already been made and returned outputs that are empty or an error, do not call the same tool anymore.
         Based on the task and the outputs, what should be the next step?
         """
         try:
@@ -144,6 +145,7 @@ class Agent:
         
         Review the task and optimize the arguments to ensure all relevant parameters are used correctly.
         Pay special attention to filtering parameters that would help narrow down results to match the task.
+        Do not nest the arguments, for example, if the task is to retrieve ttm and annual filings, and the tool args only allow for a single period, set period to either 'ttm' or 'annual' but not both.
         Return the optimized arguments in JSON format.
         """
         try:
@@ -262,9 +264,9 @@ class Agent:
 
                         # Detect and prevent repetitive action loops.
                         last_actions.append(action_sig)
-                        if len(last_actions) > 4:
-                            last_actions = last_actions[-4:]
-                        if len(set(last_actions)) == 1 and len(last_actions) == 4:
+                        if len(last_actions) > 3:
+                            last_actions = last_actions[-3:]
+                        if len(set(last_actions)) == 1 and len(last_actions) == 3:
                             self.logger._log(
                                 "Detected repeating action — aborting to avoid loop."
                             )
