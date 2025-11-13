@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 import pandas as pd
+import numpy as np
 from langchain.tools import tool
 
 from dexter.tools.finance.prices import PriceSnapshotInput, PricesInput
@@ -208,4 +209,190 @@ def yf_get_prices(
         "start_date": start_date,
         "end_date": end_date,
         "prices": records,
+    }
+
+
+@tool(args_schema=PricesInput)
+def yf_get_price_performance(
+    ticker: str,
+    interval: Literal["minute", "day", "week", "month", "year"],
+    interval_multiplier: int,
+    start_date: str,
+    end_date: str,
+) -> dict:
+    """Calculate returns, drawdowns, range, and volatility for a ticker.
+
+    **IMPORTANT**: Always prefer calling this function over yf_get_prices when raw
+    price data is not required. This function returns computed performance metrics
+    instead of raw OHLCV bars, significantly reducing input tokens and improving
+    efficiency.
+
+    Returns:
+    - Total return between start_date and end_date
+    - Total annualized return (CAGR)
+    - Periodic returns (1m, 6m, 1y, 3y) when data is available
+    - 52-week high/low range
+    - Maximum drawdown over the period
+    - Annualized volatility
+    - Current drawdown from peak
+    - Start and End price
+
+    Supports `minute`, `day`, `week`, `month`, and `year` intervals via the
+    `interval`/`interval_multiplier` pair and respects `start_date`/`end_date`
+    in ISO format.
+    """
+    ticker_obj = get_ticker(ticker)
+
+    base_interval, resample_rule = _resolve_history_request(
+        interval, interval_multiplier
+    )
+    start = _parse_iso_date(start_date)
+    end = _parse_iso_date(end_date)
+
+    history = ticker_obj.history(
+        start=start, end=end, interval=base_interval, auto_adjust=False
+    )
+    if resample_rule:
+        history = _resample_prices(history, resample_rule)
+
+    if history.empty:
+        return {
+            "data_source": "yfinance",
+            "ticker": ticker.upper(),
+            "interval": interval,
+            "interval_multiplier": interval_multiplier,
+            "start_date": start_date,
+            "end_date": end_date,
+            "error": "No price data available for the specified period",
+        }
+
+    # Use adjusted close for calculations
+    prices = history["Adj Close"].dropna()
+    if len(prices) == 0:
+        return {
+            "data_source": "yfinance",
+            "ticker": ticker.upper(),
+            "interval": interval,
+            "interval_multiplier": interval_multiplier,
+            "start_date": start_date,
+            "end_date": end_date,
+            "error": "No adjusted close prices available",
+        }
+
+    # Calculate total return (start to end)
+    start_price = prices.iloc[0]
+    end_price = prices.iloc[-1]
+    total_return = (end_price - start_price) / start_price
+
+    # Calculate total annualized return
+    start_dt = prices.index[0]
+    end_dt_for_calc = prices.index[-1]
+    days_elapsed = (end_dt_for_calc - start_dt).days
+    if days_elapsed > 0:
+        years_elapsed = days_elapsed / 365.25
+        total_annualized_return = to_python(
+            ((1 + total_return) ** (1 / years_elapsed)) - 1
+        )
+    else:
+        total_annualized_return = None
+
+    total_return = to_python(total_return)
+
+    # Calculate periodic returns
+    periodic_returns = {}
+    end_dt = prices.index[-1]
+
+    # 1 month return
+    one_month_ago = end_dt - timedelta(days=30)
+    month_prices = prices[prices.index >= one_month_ago]
+    if len(month_prices) >= 2:
+        periodic_returns["1m"] = to_python(
+            (month_prices.iloc[-1] - month_prices.iloc[0]) / month_prices.iloc[0]
+        )
+
+    # 6 month return
+    six_months_ago = end_dt - timedelta(days=180)
+    six_month_prices = prices[prices.index >= six_months_ago]
+    if len(six_month_prices) >= 2:
+        periodic_returns["6m"] = to_python(
+            (six_month_prices.iloc[-1] - six_month_prices.iloc[0])
+            / six_month_prices.iloc[0]
+        )
+
+    # 1 year return
+    one_year_ago = end_dt - timedelta(days=365)
+    one_year_prices = prices[prices.index >= one_year_ago]
+    if len(one_year_prices) >= 2:
+        periodic_returns["1y"] = to_python(
+            (one_year_prices.iloc[-1] - one_year_prices.iloc[0])
+            / one_year_prices.iloc[0]
+        )
+
+    # 3 year return
+    three_years_ago = end_dt - timedelta(days=1095)
+    three_year_prices = prices[prices.index >= three_years_ago]
+    if len(three_year_prices) >= 2:
+        periodic_returns["3y"] = to_python(
+            (three_year_prices.iloc[-1] - three_year_prices.iloc[0])
+            / three_year_prices.iloc[0]
+        )
+
+    # Calculate 52-week range
+    fifty_two_weeks_ago = end_dt - timedelta(days=365)
+    week_52_prices = prices[prices.index >= fifty_two_weeks_ago]
+    if len(week_52_prices) > 0:
+        week_52_high = to_python(week_52_prices.max())
+        week_52_low = to_python(week_52_prices.min())
+    else:
+        week_52_high = None
+        week_52_low = None
+
+    # Calculate drawdowns
+    cumulative_max = prices.expanding().max()
+    drawdowns = (prices - cumulative_max) / cumulative_max
+    max_drawdown = to_python(drawdowns.min())
+    current_drawdown = to_python(drawdowns.iloc[-1])
+
+    # Calculate annualized volatility
+    if len(prices) > 1:
+        returns = prices.pct_change().dropna()
+
+        # Determine annualization factor based on interval
+        if interval == "minute":
+            # Assume 6.5 trading hours per day, 252 trading days per year
+            periods_per_year = 252 * 6.5 * 60 / interval_multiplier
+        elif interval == "day":
+            periods_per_year = 252 / interval_multiplier
+        elif interval == "week":
+            periods_per_year = 52 / interval_multiplier
+        elif interval == "month":
+            periods_per_year = 12 / interval_multiplier
+        elif interval == "year":
+            periods_per_year = 1 / interval_multiplier
+        else:
+            periods_per_year = 252
+
+        volatility = to_python(returns.std() * np.sqrt(periods_per_year))
+    else:
+        volatility = None
+
+    return {
+        "data_source": "yfinance",
+        "ticker": ticker.upper(),
+        "interval": interval,
+        "interval_multiplier": interval_multiplier,
+        "start_date": start_date,
+        "end_date": end_date,
+        "start_price": start_price,
+        "end_price": end_price,
+        "performance": {
+            "total_return": total_return,
+            "total_annualized_return": total_annualized_return,
+            "periodic_returns": periodic_returns,
+            "52_week_high": week_52_high,
+            "52_week_low": week_52_low,
+            "max_drawdown": max_drawdown,
+            "current_drawdown": current_drawdown,
+            "annualized_volatility": volatility,
+        },
     }

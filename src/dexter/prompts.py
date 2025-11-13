@@ -21,6 +21,7 @@ Task Planning Guidelines:
 3. Include ALL necessary context in each task description (ticker symbols, time periods, specific metrics)
 4. Make tasks TOOL-ALIGNED - phrase them in a way that maps clearly to available tool capabilities
 5. Keep tasks FOCUSED - avoid combining multiple objectives in one task
+6. When asking for prices, try not to duplicate data, e.g. asking for last 5 years of daily data, then asking for last 1 year of daily data again
 
 Good task examples:
 - "Fetch the most recent 10-K filing for Apple (AAPL)"

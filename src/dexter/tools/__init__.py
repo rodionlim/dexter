@@ -28,6 +28,7 @@ from dexter.tools.yfinance.metrics import yf_get_financial_metrics_snapshot
 from dexter.tools.yfinance.metrics import yf_get_financial_metrics
 from dexter.tools.yfinance.prices import yf_get_price_snapshot
 from dexter.tools.yfinance.prices import yf_get_prices
+from dexter.tools.yfinance.prices import yf_get_price_performance
 from dexter.tools.yfinance.news import yf_get_news
 from dexter.tools.yfinance.estimates import yf_get_analyst_estimates
 
@@ -61,6 +62,7 @@ TOOLS: dict[str, list[BaseTool]] = {
         yf_get_filings,
         yf_get_price_snapshot,
         yf_get_prices,
+        yf_get_price_performance,
         yf_get_financial_metrics_snapshot,
         yf_get_financial_metrics,
         yf_get_news,

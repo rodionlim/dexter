@@ -33,7 +33,8 @@ def _get_share_count(ticker_obj) -> Optional[float]:
 
 @tool(args_schema=FinancialMetricsSnapshotInput)
 def yf_get_financial_metrics_snapshot(ticker: str) -> dict:
-    """Return headline valuation metrics (market cap, PE, dividend data) from yfinance.
+    """Return headline valuation metrics (market cap, Trailing PE, PE, PEG, PB, beta, dividend data) from yfinance.
+    If user does not request for detailed metrics, always prefer this tool over computing metrics from financial statements.
 
     Pulls from Yahoo Finance's `fast_info` and `info` payloads so the agent can
     answer quick "what's the multiple?" questions without calling the
