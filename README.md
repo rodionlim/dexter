@@ -16,6 +16,7 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 - **Autonomous Execution**: Selects and executes the right tools to gather financial data
 - **Self-Validation**: Checks its own work and iterates until tasks are complete
 - **Real-Time Financial Data**: Access to income statements, balance sheets, and cash flow statements
+- **Real-Time Search Engine**: Access to real time macroenomic news, company sentiment and news via Tavily
 - **Safety Features**: Built-in loop detection and step limits to prevent runaway execution
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
@@ -25,7 +26,9 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 - Python 3.13 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
 - OpenAI API key (get [here](https://platform.openai.com/api-keys))
-- Financial Datasets API key (get [here](https://financialdatasets.ai))
+- Financial Datasets API key [Optional] (get [here](https://financialdatasets.ai))
+- Langsmith API key (get [here](https://smith.langchain.com/))
+- Tavily API key [Optional] (get [here](https://www.tavily.com/))
 
 ### Installation
 

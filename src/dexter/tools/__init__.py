@@ -1,4 +1,6 @@
 # This file makes the directory a Python package
+import os
+
 from langchain_core.tools import BaseTool
 
 from dexter.tools.finance.filings import get_filings
@@ -16,6 +18,9 @@ from dexter.tools.finance.news import get_news
 from dexter.tools.finance.estimates import get_analyst_estimates
 from dexter.tools.finance.segments import get_segmented_revenues
 from dexter.tools.search.google import search_google_news
+from dexter.tools.search.tavily import tavily_get_social_media_sentiment
+from dexter.tools.search.tavily import tavily_get_macroeconomic_news
+from dexter.tools.search.tavily import tavily_get_company_news
 
 from dexter.tools.yfinance.filings import yf_get_filings
 from dexter.tools.yfinance.filings import yf_get_10K_filing_items
@@ -35,6 +40,14 @@ from dexter.tools.yfinance.estimates import yf_get_analyst_estimates
 
 AVAILABLE_DATA_PROVIDERS = ["financialdatasets", "yfinance"]
 
+tavily_tools = []
+if os.environ.get("TAVILY_API_KEY"):
+    tavily_tools = [
+        tavily_get_social_media_sentiment,
+        tavily_get_macroeconomic_news,
+        tavily_get_company_news,
+    ]
+
 TOOLS: dict[str, list[BaseTool]] = {
     "financialdatasets": [
         get_income_statements,
@@ -52,7 +65,8 @@ TOOLS: dict[str, list[BaseTool]] = {
         get_analyst_estimates,
         get_segmented_revenues,
         search_google_news,
-    ],
+    ]
+    + tavily_tools,
     "yfinance": [
         yf_get_comprehensive_financials,
         yf_get_income_statements,
@@ -69,5 +83,6 @@ TOOLS: dict[str, list[BaseTool]] = {
         yf_get_financial_metrics,
         yf_get_news,
         yf_get_analyst_estimates,
-    ],
+    ]
+    + tavily_tools,
 }

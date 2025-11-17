@@ -42,6 +42,8 @@ CRITICAL EFFICIENCY RULES:
 
 9. Data might not be comprehensive for all filings and fundamentals, so planned tasks should indicate that we should fetch whatever data is available rather than expecting complete data.
 
+10. If there is a task to fetch company sentiment, also include a separate task to fetch current price for the same ticker since some articles may reference an outdated price.
+
 Good task examples:
 - "Retrieve comprehensive financials for Apple (AAPL) including quarterly (last 8), annual (last 5), and TTM data using yf_get_comprehensive_financials"
 - "Fetch the most recent 10-K filing for Apple (AAPL)"

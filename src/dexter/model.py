@@ -2,7 +2,7 @@ import os
 import time
 
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, SecretStr
 from typing import Type, List, Literal, Optional
 from langchain_core.tools import BaseTool

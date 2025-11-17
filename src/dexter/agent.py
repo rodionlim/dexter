@@ -104,25 +104,26 @@ class Agent:
     @show_progress("Checking if main goal is achieved...", "")
     def is_goal_achieved(self, query: str, task_outputs: list) -> bool:
         """Check if the overall goal is achieved based on all session outputs."""
-        all_results = "\n\n".join(task_outputs)
-        prompt = f"""
-        Original user query: "{query}"
-        
-        Data and results collected from tools so far:
-        {all_results}
-        
-        Based on the data above, is the original user query sufficiently answered?
-        """
-        try:
-            resp = call_llm(
-                prompt,
-                system_prompt=META_VALIDATION_SYSTEM_PROMPT,
-                output_schema=IsDone,
-            )
-            return resp.done
-        except Exception as e:
-            self.logger._log(f"Meta-validation failed: {e}")
-            return False
+        with trace(name="is_goal_achieved"):
+            all_results = "\n\n".join(task_outputs)
+            prompt = f"""
+            Original user query: "{query}"
+            
+            Data and results collected from tools so far:
+            {all_results}
+            
+            Based on the data above, is the original user query sufficiently answered?
+            """
+            try:
+                resp = call_llm(
+                    prompt,
+                    system_prompt=META_VALIDATION_SYSTEM_PROMPT,
+                    output_schema=IsDone,
+                )
+                return resp.done
+            except Exception as e:
+                self.logger._log(f"Meta-validation failed: {e}")
+                return False
 
     # ---------- optimize tool arguments ----------
     @show_progress("Optimizing tool call...", "")
@@ -227,7 +228,7 @@ class Agent:
                 return answer
 
             # 2. Loop through tasks until all are complete or max steps are reached.
-            task_id = -1
+            task_id = 0
             while any(not t.done for t in tasks):
                 # Global safety break.
                 if step_count >= self.max_steps:
@@ -241,7 +242,7 @@ class Agent:
                 task_id += 1
 
                 with trace(
-                    name=f"task_{task_id}",
+                    name=f"task_{task_id}: {task.description}",
                     metadata={"task_description": task.description},
                 ):
                     self.logger.log_task_start(task.description)
@@ -287,12 +288,14 @@ class Agent:
 
                             # Detect and prevent repetitive action loops.
                             last_actions.append(action_sig)
-                            if len(last_actions) > 3:
-                                last_actions = last_actions[-3:]
-                            if len(set(last_actions)) == 1 and len(last_actions) == 3:
+                            if len(last_actions) > 4:
+                                last_actions = last_actions[-4:]
+                            if len(set(last_actions)) == 1 and len(last_actions) == 4:
                                 self.logger._log(
                                     "Detected repeating action — aborting to avoid loop."
                                 )
+                                task.done = True  # mark task as done to exit
+                                self.logger.log_task_done(task.description)
                                 break
 
                             # Execute the tool.
