@@ -354,8 +354,8 @@ def yf_get_price_performance(
             / three_year_prices.iloc[0]
         )
 
-    # Year-to-date return
-    ytd_start = datetime(end_dt.year, 1, 1)
+    # Year-to-date return - use pd.Timestamp to preserve timezone
+    ytd_start = pd.Timestamp(year=end_dt.year, month=1, day=1, tz=end_dt.tz)
     ytd_prices = prices[prices.index >= ytd_start]
     if len(ytd_prices) >= 2:
         periodic_returns["ytd"] = to_python(
