@@ -145,7 +145,8 @@ def yf_get_filings(
     """List recent SEC filing metadata from Yahoo Finance's feed via yfinance.
 
     Returns filing type, title, publish date, and document URLs to support SEC
-    discovery when the agent is configured for the yfinance provider.
+    discovery when the agent is configured for the yfinance provider. Only valid for US listed
+    companies.
     """
     filings = _get_sec_filings(ticker)
     results: list[dict] = []
@@ -216,7 +217,7 @@ def yf_get_10Q_filing_items(
     """Extract 10-Q sections (Item-1, Item-2, etc.) via Yahoo Finance sourced filings.
 
     Helpful for quarterly MD&A or risk discussions when operating in
-    `yfinance` mode.
+    `yfinance` mode. Only valid for US listed companies.
     """
     quarter = max(1, min(4, quarter))
 
@@ -259,7 +260,7 @@ def yf_get_8K_filing_items(
     """Extract 8-K narrative items (e.g., Item-2.02, Item-5.02) using the accession number.
 
     Matches the specified filing in Yahoo Finance's feed, fetches the SEC HTML,
-    and returns the requested sections for disclosure summarisation.
+    and returns the requested sections for disclosure summarisation. Only valid for US listed companies.
     """
     filings = _get_sec_filings(ticker)
     filing = _match_accession(filings, accession_number)

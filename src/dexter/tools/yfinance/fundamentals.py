@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from langchain.tools import tool
+from pydantic import BaseModel, Field
 
 from dexter.tools.finance.fundamentals import FinancialStatementsInput
 from dexter.tools.yfinance.shared import (
@@ -141,3 +142,92 @@ def yf_get_cash_flow_statements(
         report_period_lte,
         "cash_flow_statement",
     )
+
+
+class ComprehensiveFinancialsInput(BaseModel):
+    """Input schema for comprehensive financial statements retrieval."""
+
+    ticker: str = Field(description="Stock ticker symbol (e.g., 'AAPL', 'MSFT')")
+    include_quarterly: bool = Field(
+        default=True,
+        description="Whether to include quarterly statements (typically last 8 quarters)",
+    )
+    include_annual: bool = Field(
+        default=True,
+        description="Whether to include annual statements (typically last 5 years)",
+    )
+    include_ttm: bool = Field(
+        default=True, description="Whether to include trailing-twelve-month data"
+    )
+    quarterly_limit: int = Field(
+        default=8, description="Number of quarterly periods to retrieve"
+    )
+    annual_limit: int = Field(
+        default=5, description="Number of annual periods to retrieve"
+    )
+
+
+@tool(args_schema=ComprehensiveFinancialsInput)
+def yf_get_comprehensive_financials(
+    ticker: str,
+    include_quarterly: bool = True,
+    include_annual: bool = True,
+    include_ttm: bool = True,
+    quarterly_limit: int = 8,
+    annual_limit: int = 5,
+) -> dict:
+    """Retrieve ALL financial statements (income, balance sheet, cash flow) for multiple periods in ONE efficient call.
+
+    **CRITICAL**: This is the MOST TOKEN-EFFICIENT way to get comprehensive financial data.
+    Always prefer this tool over making multiple separate calls to yf_get_income_statements,
+    yf_get_balance_sheets, and yf_get_cash_flow_statements when you need:
+    - Multiple statement types (income + balance sheet + cash flow)
+    - Multiple periods (quarterly + annual + TTM)
+    - Complete financial picture for analysis
+
+    This single call replaces what would otherwise be 6-9 separate tool calls:
+    - 3 calls for quarterly data (income, balance, cash flow)
+    - 3 calls for annual data
+    - 3 calls for TTM data
+
+    Returns a comprehensive dataset containing:
+    - Income statements (revenue, expenses, margins)
+    - Balance sheets (assets, liabilities, equity)
+    - Cash flow statements (operating, investing, financing activities)
+
+    Use the individual statement tools (yf_get_income_statements, etc.) ONLY when:
+    - User asks specifically for ONE statement type
+    - You need very specific date filtering
+    - Query is narrowly focused on a single metric
+
+    Token savings: ~70-80% compared to multiple individual calls.
+    """
+    ticker_obj = get_ticker(ticker)
+    result = {
+        "data_source": "yfinance",
+        "ticker": ticker.upper(),
+        "statements": {},
+    }
+
+    periods_to_fetch = []
+    if include_quarterly:
+        periods_to_fetch.append(("quarterly", quarterly_limit))
+    if include_annual:
+        periods_to_fetch.append(("annual", annual_limit))
+    if include_ttm:
+        periods_to_fetch.append(("ttm", 1))
+
+    statement_types = [
+        ("income_stmt", "income_statement"),
+        ("balance_sheet", "balance_sheet"),
+        ("cashflow", "cash_flow_statement"),
+    ]
+
+    for period, limit in periods_to_fetch:
+        result["statements"][period] = {}
+        for attr_name, label in statement_types:
+            frame = load_statement_frame(ticker_obj, attr_name, period)
+            records = frame_to_records(frame, limit=limit if period != "ttm" else None)
+            result["statements"][period][label] = records
+
+    return result

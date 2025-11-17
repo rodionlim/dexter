@@ -225,12 +225,12 @@ def yf_get_price_performance(
     **IMPORTANT**: Always prefer calling this function over yf_get_prices when raw
     price data is not required. This function returns computed performance metrics
     instead of raw OHLCV bars, significantly reducing input tokens and improving
-    efficiency.
+    efficiency. Try to only call this function once, so pass in a broad enough date range.
 
     Returns:
     - Total return between start_date and end_date
     - Total annualized return (CAGR)
-    - Periodic returns (1m, 6m, 1y, 3y) when data is available
+    - Periodic returns (1w, 1m, 3m, 6m, 1y, 3y, ytd) when data is available
     - 52-week high/low range
     - Maximum drawdown over the period
     - Annualized volatility
@@ -302,12 +302,29 @@ def yf_get_price_performance(
     periodic_returns = {}
     end_dt = prices.index[-1]
 
+    # 1 week return
+    one_week_ago = end_dt - timedelta(days=7)
+    week_prices = prices[prices.index >= one_week_ago]
+    if len(week_prices) >= 2:
+        periodic_returns["1w"] = to_python(
+            (week_prices.iloc[-1] - week_prices.iloc[0]) / week_prices.iloc[0]
+        )
+
     # 1 month return
     one_month_ago = end_dt - timedelta(days=30)
     month_prices = prices[prices.index >= one_month_ago]
     if len(month_prices) >= 2:
         periodic_returns["1m"] = to_python(
             (month_prices.iloc[-1] - month_prices.iloc[0]) / month_prices.iloc[0]
+        )
+
+    # 3 month return
+    three_months_ago = end_dt - timedelta(days=90)
+    three_month_prices = prices[prices.index >= three_months_ago]
+    if len(three_month_prices) >= 2:
+        periodic_returns["3m"] = to_python(
+            (three_month_prices.iloc[-1] - three_month_prices.iloc[0])
+            / three_month_prices.iloc[0]
         )
 
     # 6 month return
@@ -335,6 +352,14 @@ def yf_get_price_performance(
         periodic_returns["3y"] = to_python(
             (three_year_prices.iloc[-1] - three_year_prices.iloc[0])
             / three_year_prices.iloc[0]
+        )
+
+    # Year-to-date return
+    ytd_start = datetime(end_dt.year, 1, 1)
+    ytd_prices = prices[prices.index >= ytd_start]
+    if len(ytd_prices) >= 2:
+        periodic_returns["ytd"] = to_python(
+            (ytd_prices.iloc[-1] - ytd_prices.iloc[0]) / ytd_prices.iloc[0]
         )
 
     # Calculate 52-week range

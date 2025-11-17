@@ -24,6 +24,7 @@ from dexter.tools.yfinance.filings import yf_get_8K_filing_items
 from dexter.tools.yfinance.fundamentals import yf_get_income_statements
 from dexter.tools.yfinance.fundamentals import yf_get_balance_sheets
 from dexter.tools.yfinance.fundamentals import yf_get_cash_flow_statements
+from dexter.tools.yfinance.fundamentals import yf_get_comprehensive_financials
 from dexter.tools.yfinance.metrics import yf_get_financial_metrics_snapshot
 from dexter.tools.yfinance.metrics import yf_get_financial_metrics
 from dexter.tools.yfinance.prices import yf_get_price_snapshot
@@ -53,6 +54,7 @@ TOOLS: dict[str, list[BaseTool]] = {
         search_google_news,
     ],
     "yfinance": [
+        yf_get_comprehensive_financials,
         yf_get_income_statements,
         yf_get_balance_sheets,
         yf_get_cash_flow_statements,

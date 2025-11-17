@@ -66,6 +66,7 @@ class Agent:
             Here is a history of tool outputs from the session so far: {last_outputs}
 
             For yahoo finance (yf_ prefixed tools), if a tool call has already been made and returned outputs that are empty or an error, do not call the same tool anymore.
+            If yf_get_comprehensive_financials has been called, do not call individual financial statement tools (yf_get_income_statements, yf_get_balance_sheets, yf_get_cash_flow_statements) for the same ticker anymore, calling individual tools will not be able to fetch any additional data.
             Based on the task and the outputs, what should be the next step?
 
             If there are no more tool calls left to make, and you need to generate a final answer, return the answer directly with no tool calls. It is okay to not generate an answer as well if the tool call output sufficiently answers the task.
