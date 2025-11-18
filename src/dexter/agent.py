@@ -3,7 +3,7 @@ from typing import List
 from langchain_core.messages import AIMessage
 from langsmith import traceable, trace
 
-from dexter.model import call_llm
+from dexter.model import call_llm, call_llm_stream
 from dexter.prompts import (
     ACTION_SYSTEM_PROMPT,
     get_answer_system_prompt,
@@ -226,7 +226,6 @@ class Agent:
             # If no tasks were created, the query is likely out of scope.
             if not tasks or len(tasks) == 0:
                 answer = self._generate_answer(query, tasks, task_outputs)
-                self.logger.log_summary(answer)
                 return answer
 
             # 2. Loop through tasks until all are complete or max steps are reached.
@@ -349,11 +348,9 @@ class Agent:
 
         # Generate the final answer from all collected tool outputs.
         answer = self._generate_answer(query, tasks, task_outputs)
-        self.logger.log_summary(answer)
         return answer
 
     # ---------- answer generation ----------
-    @show_progress("Generating answer...", "Answer ready")
     def _generate_answer(
         self, query: str, execution_plan: List[Task], task_outputs: list
     ) -> str:
@@ -374,10 +371,13 @@ class Agent:
             Based on the data above, provide a comprehensive answer to the user's query.
             Include specific numbers, calculations, and insights.
             """
-            answer_obj = call_llm(
+
+            # Stream the answer and display it in real-time
+            text_chunks = call_llm_stream(
                 answer_prompt,
                 system_prompt=get_answer_system_prompt(),
-                output_schema=Answer,
                 model_type="strong",
             )
-            return answer_obj.answer
+            accumulated_answer = self.logger.ui.stream_answer(text_chunks)
+
+            return accumulated_answer
