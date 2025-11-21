@@ -70,6 +70,7 @@ class Agent:
             Based on the task and the outputs, what should be the next step?
 
             If there are no more tool calls left to make, and you need to generate a final answer, return the answer directly with no tool calls. It is okay to not generate an answer as well if the tool call output sufficiently answers the task.
+            If the task suggests that previous task/tasks already collected the data, or it is just a task to synthesize previously collected information, it is okay to return the answer directly with no tool calls as well.
             Do not ask me any confirmation questions, use your discretion and choose the most likely option if there is uncertainty.
             For example, always prefer to use adjusted close prices for stock data analysis unless explicitly told otherwise, volatility should be annualized using sqrt(252) factor, etc.
             """
@@ -216,14 +217,15 @@ class Agent:
         step_count = 0
         last_actions = []
         task_outputs = []  # outputs from all tasks
+        tasks: List[Task] = []
 
         try:
             # 1. Decompose the user query into a list of tasks.
             tasks = self.plan_tasks(query)
 
             # If no tasks were created, the query is likely out of scope.
-            if not tasks:
-                answer = self._generate_answer(query, task_outputs)
+            if not tasks or len(tasks) == 0:
+                answer = self._generate_answer(query, tasks, task_outputs)
                 self.logger.log_summary(answer)
                 return answer
 
@@ -346,13 +348,15 @@ class Agent:
             return
 
         # Generate the final answer from all collected tool outputs.
-        answer = self._generate_answer(query, task_outputs)
+        answer = self._generate_answer(query, tasks, task_outputs)
         self.logger.log_summary(answer)
         return answer
 
     # ---------- answer generation ----------
     @show_progress("Generating answer...", "Answer ready")
-    def _generate_answer(self, query: str, task_outputs: list) -> str:
+    def _generate_answer(
+        self, query: str, execution_plan: List[Task], task_outputs: list
+    ) -> str:
         """Generate the final answer based on collected data."""
         with trace(name="answer_generation"):
             all_results = (
@@ -360,6 +364,9 @@ class Agent:
             )
             answer_prompt = f"""
             Original user query: "{query}"
+
+            Execution plan by the agent:
+            {execution_plan}
             
             Data and results collected from tools:
             {all_results}
