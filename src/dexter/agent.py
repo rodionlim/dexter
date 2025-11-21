@@ -12,10 +12,11 @@ from dexter.prompts import (
     VALIDATION_SYSTEM_PROMPT,
     META_VALIDATION_SYSTEM_PROMPT,
 )
-from dexter.schemas import Answer, IsDone, OptimizedToolArgs, Task, TaskList
+from dexter.schemas import IsDone, OptimizedToolArgs, Task, TaskList
 from dexter.tools import TOOLS
 from dexter.utils.logger import Logger
 from dexter.utils.ui import show_progress
+from dexter.utils.context import ContextManager
 
 
 class Agent:
@@ -28,6 +29,7 @@ class Agent:
         self.logger = Logger()
         self.max_steps = max_steps  # global safety cap
         self.max_steps_per_task = max_steps_per_task
+        self.context_manager = ContextManager()
         self.data_source = data_source  # which toolset to use
 
     # ---------- task planning ----------
@@ -87,33 +89,52 @@ class Agent:
     # ---------- ask LLM if task is done ----------
     @show_progress("Checking if task is complete...", "")
     def ask_if_done(self, task_desc: str, recent_results: str) -> bool:
-        prompt = f"""
-        We were trying to complete the task: "{task_desc}".
-        Here is a history of tool outputs from the session so far: {recent_results}
+        with trace(name="ask_if_done"):
+            prompt = f"""
+            We were trying to complete the task: "{task_desc}".
+            Here is a history of summarised tool outputs from the session so far: {recent_results}.
 
-        Is the task done?
-        """
-        try:
-            resp = call_llm(
-                prompt, system_prompt=VALIDATION_SYSTEM_PROMPT, output_schema=IsDone
-            )
-            return resp.done
-        except:
-            return False
+            Is the task done?
+            """
+            try:
+                resp = call_llm(
+                    prompt, system_prompt=VALIDATION_SYSTEM_PROMPT, output_schema=IsDone
+                )
+                return resp.done
+            except:
+                return False
 
     # ---------- ask LLM if main goal is achieved ----------
     @show_progress("Checking if main goal is achieved...", "")
-    def is_goal_achieved(self, query: str, task_outputs: list) -> bool:
-        """Check if the overall goal is achieved based on all session outputs."""
+    def is_goal_achieved(
+        self, query: str, task_outputs: list, tasks: List[Task]
+    ) -> bool:
+        """Check if the overall goal is achieved based on all session outputs and planned tasks."""
         with trace(name="is_goal_achieved"):
-            all_results = "\n\n".join(task_outputs)
+            all_results = (
+                "\n\n".join(task_outputs) if task_outputs else "No data collected yet."
+            )
+
+            # Format tasks for cross-reference
+            tasks_info = []
+            for task in tasks:
+                status = "✓ Done" if task.done else "✗ Not done"
+                tasks_info.append(f"- [{status}] {task.description}")
+            tasks_summary = (
+                "\n".join(tasks_info) if tasks_info else "No tasks were planned."
+            )
+
             prompt = f"""
             Original user query: "{query}"
+
+            Planned tasks (for cross-reference only - not a hard requirement):
+            {tasks_summary}
             
             Data and results collected from tools so far:
             {all_results}
             
             Based on the data above, is the original user query sufficiently answered?
+            Use the tasks as a helpful cross-reference, but prioritize whether the query itself is answered.
             """
             try:
                 resp = call_llm(
@@ -216,7 +237,9 @@ class Agent:
         # Initialize agent state for this run.
         step_count = 0
         last_actions = []
-        task_outputs = []  # outputs from all tasks
+        task_output_summaries = (
+            []
+        )  # lightweight summaries for introspection (full outputs offloaded to files)
         tasks: List[Task] = []
 
         try:
@@ -225,7 +248,7 @@ class Agent:
 
             # If no tasks were created, the query is likely out of scope.
             if not tasks or len(tasks) == 0:
-                answer = self._generate_answer(query, tasks, task_outputs)
+                answer = self._generate_answer(query, tasks)
                 return answer
 
             # 2. Loop through tasks until all are complete or max steps are reached.
@@ -250,9 +273,9 @@ class Agent:
 
                     # Define per-task step variables.
                     per_task_steps = 0
-                    task_step_outputs = (
+                    task_step_summaries = (
                         []
-                    )  # outputs from a single step of a given task.
+                    )  # lightweight summaries for task-level introspection
 
                     # Loop through steps of a single task until the task is complete or the max steps are reached.
                     while per_task_steps < self.max_steps_per_task:
@@ -262,7 +285,8 @@ class Agent:
 
                         # Ask the LLM for the next action to take for the current task.
                         ai_message = self.ask_for_actions(
-                            task.description, last_outputs="\n".join(task_step_outputs)
+                            task.description,
+                            last_outputs="\n".join(task_step_summaries),
                         )
 
                         # If no tool is called, the task is considered complete.
@@ -316,14 +340,28 @@ class Agent:
                                         tool_to_run, tool_name, optimized_args
                                     )
                                     self.logger.log_tool_run(optimized_args, result)
-                                    output = f"Output of {tool_name} with args {optimized_args}: {result}"
-                                    task_outputs.append(output)
-                                    task_step_outputs.append(output)
+
+                                    # Offload tool output to file immediately
+                                    context_path = self.context_manager.save_context(
+                                        tool_name=tool_name,
+                                        args=optimized_args,
+                                        result=result,
+                                        task_id=task.id,
+                                    )
+
+                                    # Store lightweight summary for introspection calls
+                                    pointer = self.context_manager.pointers[
+                                        -1
+                                    ]  # Get the just-added pointer
+                                    summary = f"Output of {tool_name} with args {optimized_args}: {pointer['summary']}"
+                                    task_output_summaries.append(summary)
+                                    task_step_summaries.append(summary)
+
                                 except Exception as e:
                                     self.logger._log(f"Tool execution failed: {e}")
-                                    error_output = f"Error from {tool_name} with args {optimized_args}: {e}"
-                                    task_outputs.append(error_output)
-                                    task_step_outputs.append(error_output)
+                                    error_summary = f"Error from {tool_name} with args {optimized_args}: {e}"
+                                    task_output_summaries.append(error_summary)
+                                    task_step_summaries.append(error_summary)
                             else:
                                 self.logger._log(f"Invalid tool: {tool_name}")
 
@@ -332,45 +370,80 @@ class Agent:
 
                         # Task-level introspection: Check if the task is complete.
                         if self.ask_if_done(
-                            task.description, "\n".join(task_step_outputs)
+                            task.description, "\n".join(task_step_summaries)
                         ):
                             task.done = True
                             self.logger.log_task_done(task.description)
                             break
 
                 # Global introspection: Check if the overall goal is achieved.
-                if task.done and self.is_goal_achieved(query, task_outputs):
+                if task.done and self.is_goal_achieved(
+                    query, task_output_summaries, tasks
+                ):
                     self.logger._log("Main goal achieved. Finalizing answer.")
                     break
         except KeyboardInterrupt:
             self.logger._log("\n\nExecution interrupted by user.")
             return
 
-        # Generate the final answer from all collected tool outputs.
-        answer = self._generate_answer(query, tasks, task_outputs)
+        # Generate the final answer using context selection and loading
+        # Note: _generate_answer now streams and displays the answer directly
+        answer = self._generate_answer(query, tasks)
         return answer
 
     # ---------- answer generation ----------
-    def _generate_answer(
-        self, query: str, execution_plan: List[Task], task_outputs: list
-    ) -> str:
+    def _generate_answer(self, query: str, execution_plan: List[Task]) -> str:
         """Generate the final answer based on collected data."""
         with trace(name="answer_generation"):
-            all_results = (
-                "\n\n".join(task_outputs) if task_outputs else "No data was collected."
-            )
-            answer_prompt = f"""
-            Original user query: "{query}"
+            # Get all available context pointers
+            all_pointers = self.context_manager.get_all_pointers()
 
-            Execution plan by the agent:
-            {execution_plan}
-            
-            Data and results collected from tools:
-            {all_results}
-            
-            Based on the data above, provide a comprehensive answer to the user's query.
-            Include specific numbers, calculations, and insights.
-            """
+            if not all_pointers:
+                # No data collected
+                answer_prompt = f"""
+                Original user query: "{query}"
+                
+                No data was collected from tools.
+                """
+            else:
+                # Select relevant contexts using LLM
+                selected_filepaths = self.context_manager.select_relevant_contexts(
+                    query, all_pointers
+                )
+
+                # Load selected contexts
+                selected_contexts = self.context_manager.load_contexts(
+                    selected_filepaths
+                )
+
+                # Format loaded contexts for the prompt
+                formatted_results = []
+                for ctx in selected_contexts:
+                    tool_name = ctx.get("tool_name", "unknown")
+                    args = ctx.get("args", {})
+                    result = ctx.get("result", {})
+                    formatted_results.append(
+                        f"Output of {tool_name} with args {args}:\n{result}"
+                    )
+
+                all_results = (
+                    "\n\n".join(formatted_results)
+                    if formatted_results
+                    else "No relevant data was selected."
+                )
+
+                answer_prompt = f"""
+                Original user query: "{query}"
+
+                Execution plan by the agent:
+                {execution_plan}
+                
+                Data and results collected from tools:
+                {all_results}
+                
+                Based on the data above, provide a comprehensive answer to the user's query.
+                Include specific numbers, calculations, and insights.
+                """
 
             # Stream the answer and display it in real-time
             text_chunks = call_llm_stream(
