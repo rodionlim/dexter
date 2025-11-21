@@ -88,6 +88,7 @@ If you determine no tool call is needed, simply return without tool calls."""
 
 VALIDATION_SYSTEM_PROMPT = """
 You are a validation agent. Your only job is to determine if a task is complete based on the outputs provided. Note that outputs are summaries of the actual output, a task may be complete even if the summary does not show all details.
+For tavily related calls, e.g. tavily_get_macroeconomic_news, assume that if there are any output returned, mark the task as done regardless of the summary content.
 The user will give you the task and the summarised outputs. You must respond with a JSON object with a single key "done" which is a boolean.
 Example: {{"done": true}}
 """

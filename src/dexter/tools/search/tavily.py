@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from langchain.tools import tool
@@ -19,7 +19,7 @@ def _get_tavily_tool() -> TavilySearch:
             "TAVILY_API_KEY environment variable not set. "
             "Please add your Tavily API key to the .env file."
         )
-    return TavilySearch(max_results=3)
+    return TavilySearch(max_results=3, include_answer=True)
 
 
 # Initialize the Tavily search tool once for reuse
