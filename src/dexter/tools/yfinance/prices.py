@@ -124,51 +124,58 @@ def _history_to_records(frame: pd.DataFrame) -> list[dict]:
 
 
 @tool(args_schema=PriceSnapshotInput)
-def yf_get_price_snapshot(ticker: str) -> dict:
-    """Fetch the latest Yahoo Finance quote snapshot (price, volume, market cap).
+def yf_get_price_snapshot(tickers: list[str]) -> dict:
+    """Fetch the latest Yahoo Finance quote snapshots (price, volume, market cap) for one or more tickers.
 
+    Use yahoo finance tickers, for example, Singapore banks like DBS is D05.SI, Apple is AAPL and S&P 500 is ^GSPC.
     Returns fast-moving fields such as last price, day range, previous close,
-    and recent volume using yfinance's `fast_info` plus metadata fallbacks. Use
-    this for real-time oriented prompts while operating in `yfinance` mode.
+    and recent volume using yfinance's `fast_info` plus metadata fallbacks keyed by tickers.
+    Use this for real-time oriented prompts while operating in `yfinance` mode.
     """
-    ticker_obj = get_ticker(ticker)
-    snapshot: dict[str, Optional[float | str]] = {"ticker": ticker.upper()}
+    snapshots = {}
+    for ticker in tickers:
+        ticker_obj = get_ticker(ticker)
+        snapshot: dict[str, Optional[float | str]] = {"ticker": ticker.upper()}
 
-    fast_info = getattr(ticker_obj, "fast_info", None)
-    if fast_info is not None:
-        snapshot.update(
-            {
-                "currency": getattr(fast_info, "currency", None),
-                "last_price": to_python(getattr(fast_info, "last_price", None)),
-                "previous_close": to_python(getattr(fast_info, "previous_close", None)),
-                "open": to_python(getattr(fast_info, "open", None)),
-                "day_high": to_python(getattr(fast_info, "day_high", None)),
-                "day_low": to_python(getattr(fast_info, "day_low", None)),
-                "volume": to_python(getattr(fast_info, "last_volume", None)),
-                "market_cap": to_python(getattr(fast_info, "market_cap", None)),
-            }
+        fast_info = getattr(ticker_obj, "fast_info", None)
+        if fast_info is not None:
+            snapshot.update(
+                {
+                    "currency": getattr(fast_info, "currency", None),
+                    "last_price": to_python(getattr(fast_info, "last_price", None)),
+                    "previous_close": to_python(
+                        getattr(fast_info, "previous_close", None)
+                    ),
+                    "open": to_python(getattr(fast_info, "open", None)),
+                    "day_high": to_python(getattr(fast_info, "day_high", None)),
+                    "day_low": to_python(getattr(fast_info, "day_low", None)),
+                    "volume": to_python(getattr(fast_info, "last_volume", None)),
+                    "market_cap": to_python(getattr(fast_info, "market_cap", None)),
+                }
+            )
+
+        info = getattr(ticker_obj, "info", {}) or {}
+        snapshot.setdefault("currency", info.get("currency"))
+        snapshot.setdefault("last_price", to_python(info.get("regularMarketPrice")))
+        snapshot.setdefault(
+            "previous_close", to_python(info.get("regularMarketPreviousClose"))
         )
+        snapshot.setdefault("open", to_python(info.get("regularMarketOpen")))
+        snapshot.setdefault("day_high", to_python(info.get("regularMarketDayHigh")))
+        snapshot.setdefault("day_low", to_python(info.get("regularMarketDayLow")))
+        snapshot.setdefault("volume", to_python(info.get("regularMarketVolume")))
+        snapshot.setdefault("market_cap", to_python(info.get("marketCap")))
 
-    info = getattr(ticker_obj, "info", {}) or {}
-    snapshot.setdefault("currency", info.get("currency"))
-    snapshot.setdefault("last_price", to_python(info.get("regularMarketPrice")))
-    snapshot.setdefault(
-        "previous_close", to_python(info.get("regularMarketPreviousClose"))
-    )
-    snapshot.setdefault("open", to_python(info.get("regularMarketOpen")))
-    snapshot.setdefault("day_high", to_python(info.get("regularMarketDayHigh")))
-    snapshot.setdefault("day_low", to_python(info.get("regularMarketDayLow")))
-    snapshot.setdefault("volume", to_python(info.get("regularMarketVolume")))
-    snapshot.setdefault("market_cap", to_python(info.get("marketCap")))
+        market_time = info.get("regularMarketTime")
+        if isinstance(market_time, (int, float)):
+            snapshot["market_time"] = datetime.fromtimestamp(market_time).isoformat()
 
-    market_time = info.get("regularMarketTime")
-    if isinstance(market_time, (int, float)):
-        snapshot["market_time"] = datetime.fromtimestamp(market_time).isoformat()
+        snapshots[ticker] = {
+            "data_source": "yfinance",
+            "snapshot": snapshot,
+        }
 
-    return {
-        "data_source": "yfinance",
-        "snapshot": snapshot,
-    }
+    return snapshots
 
 
 @tool(args_schema=PricesInput)

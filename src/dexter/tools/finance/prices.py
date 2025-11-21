@@ -1,21 +1,26 @@
+# fmt: off
 from langchain.tools import tool
-from typing import Literal, Optional
+from typing import Literal
 from pydantic import BaseModel, Field
 from dexter.tools.finance.api import call_api
 
 class PriceSnapshotInput(BaseModel):
     """Input for get_price_snapshot."""
-    ticker: str = Field(..., description="The stock ticker symbol to fetch the price snapshot for. For example, 'AAPL' for Apple.")
+    tickers: list[str] = Field(..., description="The list of stock ticker symbols to fetch the price snapshot for. For example, ['AAPL', 'MSFT'].")
 
 @tool(args_schema=PriceSnapshotInput)
-def get_price_snapshot(ticker: str) -> dict:
+def get_price_snapshot(tickers: list[str]) -> dict:
     """
-    Fetches the most recent price snapshot for a specific stock,
+    Fetches the most recent price snapshot for one more more stocks,
     including the latest price, trading volume, and other open, high, low, and close price data.
     """
-    params = {"ticker": ticker}
-    data = call_api("/prices/snapshot/", params)
-    return data.get("snapshot", {})
+    snapshots = {}
+    for ticker in tickers:
+        params = {"ticker": ticker}
+        data = call_api("/prices/snapshot/", params)
+        snapshots[ticker] = data.get("snapshot", {})
+    
+    return snapshots
 
 class PricesInput(BaseModel):
     """Input for get_prices."""
