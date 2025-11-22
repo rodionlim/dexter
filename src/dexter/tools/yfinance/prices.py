@@ -237,7 +237,7 @@ def yf_get_price_performance(
     Returns:
     - Total return between start_date and end_date
     - Total annualized return (CAGR)
-    - Periodic returns (1w, 1m, 3m, 6m, 1y, 3y, ytd) when data is available
+    - Periodic returns (1d, 1w, 1m, 3m, 6m, 1y, 3y, 5y, ytd) when data is available
     - 52-week high/low range
     - Maximum drawdown over the period
     - Annualized volatility
@@ -309,6 +309,14 @@ def yf_get_price_performance(
     periodic_returns = {}
     end_dt = prices.index[-1]
 
+    # 1 day return
+    one_day_ago = end_dt - timedelta(days=1)
+    day_prices = prices[prices.index >= one_day_ago]
+    if len(day_prices) >= 2:
+        periodic_returns["1d"] = to_python(
+            (day_prices.iloc[-1] - day_prices.iloc[0]) / day_prices.iloc[0]
+        )
+
     # 1 week return
     one_week_ago = end_dt - timedelta(days=7)
     week_prices = prices[prices.index >= one_week_ago]
@@ -359,6 +367,15 @@ def yf_get_price_performance(
         periodic_returns["3y"] = to_python(
             (three_year_prices.iloc[-1] - three_year_prices.iloc[0])
             / three_year_prices.iloc[0]
+        )
+
+    # 5 year return
+    five_years_ago = end_dt - timedelta(days=1825)
+    five_year_prices = prices[prices.index >= five_years_ago]
+    if len(five_year_prices) >= 2:
+        periodic_returns["5y"] = to_python(
+            (five_year_prices.iloc[-1] - five_year_prices.iloc[0])
+            / five_year_prices.iloc[0]
         )
 
     # Year-to-date return - use pd.Timestamp to preserve timezone
