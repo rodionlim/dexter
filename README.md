@@ -37,7 +37,7 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/virattt/dexter.git
+git clone https://github.com/rodionlim/dexter.git
 cd dexter
 ```
 
