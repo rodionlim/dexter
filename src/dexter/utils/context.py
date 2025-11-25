@@ -81,7 +81,9 @@ class ContextManager:
                     prompt, system_prompt=DEFAULT_SYSTEM_PROMPT, model_type="standard"
                 )
                 summary = (
-                    response.content if hasattr(response, "content") else str(response)
+                    str(response.content)
+                    if hasattr(response, "content")
+                    else str(response)
                 )
                 return summary.strip()
             except Exception as e:
@@ -218,7 +220,7 @@ class ContextManager:
             if isinstance(response, SelectedContexts):
                 selected_ids = response.context_ids
             elif hasattr(response, "context_ids"):
-                selected_ids = response.context_ids
+                selected_ids = response.context_ids  # type: ignore
             else:
                 # Fallback: return all if selection fails
                 selected_ids = list(range(len(available_pointers)))

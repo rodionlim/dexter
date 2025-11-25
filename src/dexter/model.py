@@ -2,14 +2,72 @@ import os
 import time
 
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, SecretStr
 from typing import Iterator, List, Literal, Optional, Type
 from langchain_core.tools import BaseTool
 from langchain_core.messages import AIMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+
 from openai import APIConnectionError
 
 from dexter.prompts import DEFAULT_SYSTEM_PROMPT
+
+DEFAULT_MODEL_TYPE = "standard"  # strong or standard
+
+
+def get_chat_model(
+    model_type: str = DEFAULT_MODEL_TYPE,
+    temperature: float = 0,
+    streaming: bool = False,
+) -> BaseChatModel:
+    """
+    Factory function to get the appropriate chat model based on the llm type.
+    """
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key:
+        raise ValueError("LLM_API_KEY not found in environment variables")
+
+    llm_type = os.getenv("LLM_API_TYPE", "openai").lower()
+
+    model_name = os.getenv(
+        f"LLM_API_{model_type.upper() + '_' if model_type.upper() == 'STRONG' else ''}MODEL",
+        "gpt-5-mini",
+    )
+
+    if llm_type == "claude":
+        # Anthropic models
+        return ChatAnthropic(
+            model_name=model_name,
+            temperature=temperature,
+            api_key=SecretStr(api_key),
+            streaming=streaming,
+            timeout=300,
+            stop=["\nHuman:", "\nAssistant:"],
+        )
+
+    elif llm_type == "gemini":
+        # Google Gemini models
+        return ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=temperature,
+            google_api_key=api_key,
+            streaming=streaming,
+            convert_system_message_to_human=True,
+        )
+
+    else:
+        # Default to OpenAI (gpt-* or others)
+        # OpenAI client handles reading OPENAI_API_KEY from env automatically if not passed,
+        # but we pass it explicitly to match existing pattern if set.
+        return ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            api_key=SecretStr(api_key),
+            streaming=streaming,
+        )
 
 
 # Initialize the OpenAI client
@@ -27,18 +85,11 @@ def call_llm(
         [("system", final_system_prompt), ("user", "{prompt}")]
     )
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set.")
-
     # Initialize the LLM.
-    llm = ChatOpenAI(
-        model=os.getenv(
-            f"OPENAI_API_{'STRONG_' if model_type.upper() == 'STRONG' else ''}MODEL",
-            "gpt-5-nano",
-        ),
+    llm = get_chat_model(
+        model_type=model_type,
         temperature=0,
-        api_key=SecretStr(api_key),
+        streaming=False,
     )
 
     # Add structured output or tools to the LLM.
@@ -80,18 +131,10 @@ def call_llm_stream(
         [("system", final_system_prompt), ("user", "{prompt}")]
     )
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set.")
-
     # Initialize the LLM with streaming enabled
-    llm = ChatOpenAI(
-        model=os.getenv(
-            f"OPENAI_API_{'STRONG_' if model_type.upper() == 'STRONG' else ''}MODEL",
-            "gpt-5-nano",
-        ),
+    llm = get_chat_model(
+        model_type=model_type,
         temperature=0,
-        api_key=SecretStr(api_key),
         streaming=True,
     )
 

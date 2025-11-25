@@ -2,7 +2,7 @@
 
 Dexter is an autonomous financial research agent that thinks, plans, and learns as it works. It performs analysis using task planning, self-reflection, and real-time market data. Think Claude Code, but built specifically for financial research.
 
-This repository is a fork of https://github.com/michaelh03/dexter-free
+This repository is a fork of https://github.com/michaelh03/dexter-free. Multiple LLM providers are supported (claude/gemini/openai).
 
 <img width="979" height="651" alt="Screenshot 2025-10-14 at 6 12 35 PM" src="https://github.com/user-attachments/assets/5a2859d4-53cf-4638-998a-15cef3c98038" />
 
@@ -23,12 +23,11 @@ Dexter takes complex financial questions and turns them into clear, step-by-step
 
 <img width="996" height="639" alt="Screenshot 2025-11-22 at 1 45 07 PM" src="https://github.com/user-attachments/assets/8915fd70-82c9-4775-bdf9-78d5baf28a8a" />
 
-
 ### Prerequisites
 
 - Python 3.13 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
-- OpenAI API key (get [here](https://platform.openai.com/api-keys))
+- One of OpenAI/Gemini/Claude API key (get [here](https://platform.openai.com/api-keys))
 - Financial Datasets API key [Optional] (get [here](https://financialdatasets.ai))
 - Langsmith API key (get [here](https://smith.langchain.com/))
 - Tavily API key [Optional] (get [here](https://www.tavily.com/))
