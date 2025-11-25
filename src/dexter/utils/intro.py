@@ -1,3 +1,4 @@
+# fmt: off
 def print_intro():
     """Display the welcome screen with ASCII art."""
     # ANSI color codes
@@ -31,6 +32,5 @@ def print_intro():
     print(dexter_art)
     print()
     print("Your AI assistant for financial analysis.")
-    print("Ask me any questions. Type 'exit' or 'quit' to end.")
+    print("Ask me any questions. Press Ctrl+C to quit.")
     print()
-

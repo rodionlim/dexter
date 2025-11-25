@@ -108,6 +108,9 @@ def call_llm(
     for attempt in range(3):
         try:
             return chain.invoke({"prompt": prompt})
+        except KeyboardInterrupt:
+            # Don't retry on user interrupt, propagate immediately
+            raise
         except APIConnectionError as e:
             if attempt == 2:  # Last attempt
                 raise
@@ -150,6 +153,9 @@ def call_llm_stream(
                     if content:  # Only yield non-empty content
                         yield content
             break
+        except KeyboardInterrupt:
+            # Don't retry on user interrupt, propagate immediately
+            raise
         except APIConnectionError as e:
             if attempt == 2:  # Last attempt
                 raise
