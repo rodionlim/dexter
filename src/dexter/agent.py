@@ -3,7 +3,12 @@ from typing import List
 from langchain_core.messages import AIMessage
 from langsmith import traceable, trace
 
-from dexter.model import call_llm, call_llm_stream
+from dexter.model import (
+    call_llm,
+    call_llm_stream,
+    DEFAULT_MODEL_PROVIDER,
+    MODEL_PROVIDER,
+)
 from dexter.prompts import (
     ACTION_SYSTEM_PROMPT,
     get_answer_system_prompt,
@@ -25,11 +30,13 @@ class Agent:
         max_steps: int = 20,
         max_steps_per_task: int = 5,
         data_source: str = "yfinance",
+        model: MODEL_PROVIDER = DEFAULT_MODEL_PROVIDER,
     ):
         self.logger = Logger()
         self.max_steps = max_steps  # global safety cap
         self.max_steps_per_task = max_steps_per_task
-        self.context_manager = ContextManager()
+        self.model: MODEL_PROVIDER = model
+        self.context_manager = ContextManager(model=model)
         self.data_source = data_source  # which toolset to use
 
     # ---------- task planning ----------
@@ -49,7 +56,7 @@ class Agent:
                 response = call_llm(
                     prompt, system_prompt=system_prompt, output_schema=TaskList
                 )
-                tasks = response.tasks
+                tasks = response.tasks  # type: ignore
             except Exception as e:
                 self.logger._log(f"Planning failed: {e}")
                 tasks = [Task(id=1, description=query, done=False)]
@@ -81,6 +88,7 @@ class Agent:
                     prompt,
                     system_prompt=ACTION_SYSTEM_PROMPT,
                     tools=TOOLS[self.data_source],
+                    model=self.model,
                 )
             except Exception as e:
                 self.logger._log(f"ask_for_actions failed: {e}")
@@ -98,9 +106,12 @@ class Agent:
             """
             try:
                 resp = call_llm(
-                    prompt, system_prompt=VALIDATION_SYSTEM_PROMPT, output_schema=IsDone
+                    prompt,
+                    system_prompt=VALIDATION_SYSTEM_PROMPT,
+                    output_schema=IsDone,
+                    model=self.model,
                 )
-                return resp.done
+                return resp.done  # type: ignore
             except KeyboardInterrupt:
                 raise
             except:
@@ -143,8 +154,9 @@ class Agent:
                     prompt,
                     system_prompt=META_VALIDATION_SYSTEM_PROMPT,
                     output_schema=IsDone,
+                    model=self.model,
                 )
-                return resp.done
+                return resp.done  # type: ignore
             except Exception as e:
                 self.logger._log(f"Meta-validation failed: {e}")
                 return False
@@ -189,11 +201,12 @@ class Agent:
                     prompt,
                     system_prompt=get_tool_args_system_prompt(),
                     output_schema=OptimizedToolArgs,
+                    model=self.model,
                 )
                 # Handle case where LLM returns dict directly instead of OptimizedToolArgs
                 if isinstance(response, dict):
                     return response if response else initial_args
-                return response.arguments
+                return response.arguments  # type: ignore
             except Exception as e:
                 self.logger._log(
                     f"Argument optimization failed: {e}, using original args"
@@ -453,6 +466,7 @@ class Agent:
                 answer_prompt,
                 system_prompt=get_answer_system_prompt(),
                 model_type="strong",
+                model=self.model,
             )
             accumulated_answer = self.logger.ui.stream_answer(text_chunks)
 

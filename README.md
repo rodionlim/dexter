@@ -54,7 +54,7 @@ uv sync
 cp env.example .env
 
 # Edit .env and add your API keys
-# OPENAI_API_KEY=your-openai-api-key
+# LLM_API_OPENAI_KEY=your-openai-api-key
 # FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
 ```
 

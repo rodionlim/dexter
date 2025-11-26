@@ -7,10 +7,10 @@ from datetime import datetime
 from langsmith import trace
 from pathlib import Path
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Literal, Dict, Any, Optional
 from dotenv import load_dotenv
 
-from dexter.model import call_llm
+from dexter.model import call_llm, MODEL_PROVIDER
 from dexter.prompts import DEFAULT_SYSTEM_PROMPT, CONTEXT_SELECTION_SYSTEM_PROMPT
 
 load_dotenv()
@@ -19,12 +19,17 @@ load_dotenv()
 class ContextManager:
     """Manages context offloading and onloading for tool outputs."""
 
-    def __init__(self, context_dir: str = ".dexter/context"):
+    def __init__(
+        self,
+        context_dir: str = ".dexter/context",
+        model: MODEL_PROVIDER = "openai",
+    ):
         """
         Initialize the context manager.
 
         Args:
             context_dir: Directory path for storing context files
+            model: The model to use for LLM calls
         """
         self.context_dir = Path(context_dir)
 
@@ -35,6 +40,7 @@ class ContextManager:
 
         self.context_dir.mkdir(parents=True, exist_ok=True)
         self.pointers: List[Dict[str, Any]] = []
+        self.model: MODEL_PROVIDER = model
 
     def _hash_args(self, args: dict) -> str:
         """Generate a hash of tool arguments for filename."""
@@ -78,7 +84,10 @@ class ContextManager:
 
             try:
                 response = call_llm(
-                    prompt, system_prompt=DEFAULT_SYSTEM_PROMPT, model_type="standard"
+                    prompt,
+                    system_prompt=DEFAULT_SYSTEM_PROMPT,
+                    model_type="standard",
+                    model=self.model,
                 )
                 summary = (
                     str(response.content)
@@ -214,6 +223,7 @@ class ContextManager:
                 system_prompt=CONTEXT_SELECTION_SYSTEM_PROMPT,
                 output_schema=SelectedContexts,
                 model_type="strong",
+                model=self.model,
             )
 
             # Extract selected IDs

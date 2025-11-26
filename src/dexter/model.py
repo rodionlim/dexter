@@ -16,9 +16,12 @@ from openai import APIConnectionError
 from dexter.prompts import DEFAULT_SYSTEM_PROMPT
 
 DEFAULT_MODEL_TYPE = "standard"  # strong or standard
+DEFAULT_MODEL_PROVIDER = "openai"  # openai, anthropic, gemini
+MODEL_PROVIDER = Literal["openai", "anthropic", "gemini"]
 
 
 def get_chat_model(
+    model: MODEL_PROVIDER = DEFAULT_MODEL_PROVIDER,
     model_type: str = DEFAULT_MODEL_TYPE,
     temperature: float = 0,
     streaming: bool = False,
@@ -26,18 +29,18 @@ def get_chat_model(
     """
     Factory function to get the appropriate chat model based on the llm type.
     """
-    api_key = os.getenv("LLM_API_KEY")
+    api_key = os.getenv(f"LLM_API_{model.upper()}_KEY")
     if not api_key:
-        raise ValueError("LLM_API_KEY not found in environment variables")
-
-    llm_type = os.getenv("LLM_API_TYPE", "openai").lower()
+        raise ValueError(
+            f"LLM_API_{model.upper()}_KEY not found in environment variables"
+        )
 
     model_name = os.getenv(
-        f"LLM_API_{model_type.upper() + '_' if model_type.upper() == 'STRONG' else ''}MODEL",
+        f"LLM_API_{model.upper()}_{model_type.upper() + '_' if model_type.upper() == 'STRONG' else ''}MODEL",
         "gpt-5-mini",
     )
 
-    if llm_type == "claude":
+    if model == "claude":
         # Anthropic models
         return ChatAnthropic(
             model_name=model_name,
@@ -48,7 +51,7 @@ def get_chat_model(
             stop=["\nHuman:", "\nAssistant:"],
         )
 
-    elif llm_type == "gemini":
+    elif model == "gemini":
         # Google Gemini models
         return ChatGoogleGenerativeAI(
             model=model_name,
@@ -78,7 +81,8 @@ def call_llm(
     output_schema: Optional[Type[BaseModel]] = None,
     tools: Optional[List[BaseTool]] = None,
     model_type: Literal["standard", "strong"] = "standard",
-) -> AIMessage:
+    model: MODEL_PROVIDER = "openai",
+) -> AIMessage:  # type: ignore
     final_system_prompt = system_prompt if system_prompt else DEFAULT_SYSTEM_PROMPT
 
     prompt_template = ChatPromptTemplate.from_messages(
@@ -87,6 +91,7 @@ def call_llm(
 
     # Initialize the LLM.
     llm = get_chat_model(
+        model=model,
         model_type=model_type,
         temperature=0,
         streaming=False,
@@ -107,7 +112,7 @@ def call_llm(
     # Retry logic for transient connection errors
     for attempt in range(3):
         try:
-            return chain.invoke({"prompt": prompt})
+            return chain.invoke({"prompt": prompt})  # type: ignore
         except KeyboardInterrupt:
             # Don't retry on user interrupt, propagate immediately
             raise
@@ -121,6 +126,7 @@ def call_llm_stream(
     prompt: str,
     system_prompt: Optional[str] = None,
     model_type: str = "strong",
+    model: MODEL_PROVIDER = "openai",
 ) -> Iterator[str]:
     """
     Stream LLM responses as text chunks.
@@ -136,6 +142,7 @@ def call_llm_stream(
 
     # Initialize the LLM with streaming enabled
     llm = get_chat_model(
+        model=model,
         model_type=model_type,
         temperature=0,
         streaming=True,
@@ -151,7 +158,7 @@ def call_llm_stream(
                 if hasattr(chunk, "content"):
                     content = chunk.content
                     if content:  # Only yield non-empty content
-                        yield content
+                        yield content  # type: ignore
             break
         except KeyboardInterrupt:
             # Don't retry on user interrupt, propagate immediately

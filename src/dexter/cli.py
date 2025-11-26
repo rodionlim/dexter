@@ -1,48 +1,56 @@
-import argparse
-import os
-
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+from typing import Optional
+
 from dexter.agent import Agent
-from dexter.tools import AVAILABLE_DATA_PROVIDERS
 from dexter.utils.intro import print_intro
-from prompt_toolkit import PromptSession
-from prompt_toolkit.history import InMemoryHistory
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run the Dexter financial research agent."
-    )
-    parser.add_argument(
-        "--provider",
-        choices=AVAILABLE_DATA_PROVIDERS,
-        default=os.getenv("DEXTER_DATA_PROVIDER", "yfinance"),
-        help="Select the data provider backend. Overrides the DEXTER_DATA_PROVIDER environment variable.",
-    )
-    return parser.parse_args()
+from dexter.utils.input import create_input_session, prompt_user
+from dexter.utils.model_selector import select_model_provider
+from dexter.utils.env import ensure_api_key_for_model_provider
+from dexter.utils.config import get_setting, set_setting
+from dexter.model import DEFAULT_MODEL_PROVIDER, MODEL_PROVIDER
 
 
 def main():
-    args = _parse_args()
     print_intro()
-    agent = Agent(data_source=args.provider)
+    current_model_provider: MODEL_PROVIDER = get_setting(
+        "model", DEFAULT_MODEL_PROVIDER
+    )
+    # Ensure API key exists for default model, prompt if missing
+    ensure_api_key_for_model_provider(current_model_provider)
+    agent = Agent(model=current_model_provider)
 
-    # Create a prompt session
-    session = PromptSession(history=InMemoryHistory())
+    # Create a prompt session with styled input and hints toolbar
+    session = create_input_session()
 
     while True:
         try:
-            # Prompt the user for input
-            query = session.prompt(">> ")
-            if query.lower() in ["exit", "quit"]:
+            query = prompt_user(session)
+            if query is None:
                 print("Goodbye!")
                 break
             if query:
-                # Run the agent
+                # Check if user wants to change model
+                if query.strip() == "/model":
+                    selected_model_provider: Optional[MODEL_PROVIDER] = select_model_provider(current_model_provider)  # type: ignore
+                    if selected_model_provider:
+                        # Check and prompt for API key if needed
+                        if ensure_api_key_for_model_provider(selected_model_provider):
+                            current_model_provider = selected_model_provider
+                            set_setting("model", current_model_provider)
+                            agent = Agent(model=current_model_provider)
+                            print(
+                                f"\n✓ Model provider changed to \033[38;2;88;166;255m{selected_model_provider}\033[0m\n"
+                            )
+                        else:
+                            print(
+                                f"\n✗ Cannot use model provider {selected_model_provider} without API key. Please try again.\n"
+                            )
+                    continue
+
                 try:
                     agent.run(query)
                 except KeyboardInterrupt:

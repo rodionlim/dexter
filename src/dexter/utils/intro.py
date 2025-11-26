@@ -32,5 +32,5 @@ def print_intro():
     print(dexter_art)
     print()
     print("Your AI assistant for financial analysis.")
-    print("Ask me any questions. Press Ctrl+C to quit.")
+    print("Ask me any question. Press Ctrl+C to quit. Type /model to change the model.")
     print()
