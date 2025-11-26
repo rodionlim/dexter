@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+import pandas as pd
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 from dexter.tools.finance.fundamentals import FinancialStatementsInput
 from dexter.tools.yfinance.shared import (
@@ -14,6 +15,7 @@ from dexter.tools.yfinance.shared import (
     get_ticker,
     limit_records,
     load_statement_frame,
+    to_python,
 )
 
 
@@ -231,3 +233,142 @@ def yf_get_comprehensive_financials(
             result["statements"][period][label] = records
 
     return result
+
+
+def yf_search_line_items(
+    ticker: str,
+    line_items: list[str],
+    period: str = "annual",
+    limit: int = 10,
+) -> list[dict]:
+    """
+    Fetch selected individual line items across different financial statements across years.
+
+    This utility function allows grabbing specific metrics like 'revenue', 'net_income', etc.
+    for a ticker over available annual periods.
+
+    Args:
+        ticker: Stock ticker symbol.
+        line_items: List of line items to fetch. Supported:
+            revenue, earnings_per_share, net_income, operating_income,
+            gross_margin, operating_margin, free_cash_flow, capital_expenditure,
+            cash_and_equivalents, total_debt, shareholders_equity,
+            outstanding_shares, ebit, ebitda
+        period: Only "annual" is supported.
+        limit: Max number of years to return.
+
+    Returns:
+        List of dictionaries, each containing 'period' (year) and requested line items.
+    """
+    if period != "annual":
+        raise ValueError("Only 'annual' period is supported for yf_search_line_items")
+
+    ticker_obj = get_ticker(ticker)
+
+    # Load all statements
+    income = load_statement_frame(ticker_obj, "income_stmt", "annual")
+    balance = load_statement_frame(ticker_obj, "balance_sheet", "annual")
+    cashflow = load_statement_frame(ticker_obj, "cashflow", "annual")
+
+    frames = [f for f in [income, balance, cashflow] if f is not None and not f.empty]
+
+    if not frames:
+        return []
+
+    # Concatenate all frames.
+    # Note: yfinance frames have dates as columns.
+    # We align them by column (date).
+    combined = pd.concat(frames)
+
+    # Remove duplicate indices (line items) to avoid ambiguity
+    combined = combined.loc[~combined.index.duplicated(keep="first")]
+
+    # Transpose so dates are rows
+    combined = combined.T
+
+    # Sort by date descending (newest first)
+    combined = combined.sort_index(ascending=False)
+
+    # Limit
+    combined = combined.head(limit)
+
+    results = []
+
+    # Mapping from requested key to yfinance index label(s)
+    # Priority list for lookup
+    mapping = {
+        "revenue": ["Total Revenue", "Operating Revenue"],
+        "earnings_per_share": ["Basic EPS", "Diluted EPS"],
+        "net_income": ["Net Income", "Net Income Common Stockholders"],
+        "operating_income": ["Operating Income"],
+        "free_cash_flow": ["Free Cash Flow"],
+        "capital_expenditure": ["Capital Expenditure"],
+        "cash_and_equivalents": ["Cash And Cash Equivalents"],
+        "total_debt": ["Total Debt"],
+        "shareholders_equity": [
+            "Stockholders Equity",
+            "Total Equity Gross Minority Interest",
+        ],
+        "outstanding_shares": ["Share Issued", "Basic Average Shares"],
+        "ebit": ["EBIT"],
+        "ebitda": ["EBITDA"],
+        # Margins are calculated
+        "gross_margin": [],
+        "operating_margin": [],
+    }
+
+    for date_idx, row in combined.iterrows():
+        # date_idx is Timestamp
+        year = date_idx.year if hasattr(date_idx, "year") else str(date_idx)  # type: ignore
+
+        record = {"period": year}
+
+        # Helper to find value
+        def get_val(keys):
+            for k in keys:
+                if k in row.index:
+                    val = row[k]
+                    # Ensure scalar if duplicates somehow persist
+                    if isinstance(val, pd.Series):
+                        val = val.iloc[0]
+
+                    if pd.notna(val):
+                        return to_python(val)
+            return None
+
+        # Pre-fetch common values for calculations
+        total_revenue = get_val(["Total Revenue", "Operating Revenue"])
+        gross_profit = get_val(["Gross Profit"])
+        operating_income = get_val(["Operating Income"])
+
+        for item in line_items:
+            if item in mapping:
+                val = get_val(mapping[item])
+
+                # Handle calculations
+                if item == "gross_margin":
+                    if (
+                        isinstance(gross_profit, (int, float))
+                        and isinstance(total_revenue, (int, float))
+                        and total_revenue != 0
+                    ):
+                        val = gross_profit / total_revenue
+                elif item == "operating_margin":
+                    if (
+                        isinstance(operating_income, (int, float))
+                        and isinstance(total_revenue, (int, float))
+                        and total_revenue != 0
+                    ):
+                        val = operating_income / total_revenue
+
+                if val is not None:
+                    record[item] = val
+            else:
+                # Try direct match if not in mapping
+                val = get_val([item])
+                if val is not None:
+                    record[item] = val
+
+        results.append(record)
+
+    return results
