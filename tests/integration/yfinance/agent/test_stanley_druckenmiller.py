@@ -1,36 +1,47 @@
 import pytest
 
 from dexter.tools.yfinance.agent.stanley_druckenmiller import (
-    analyze_growth_and_momentum,
+    stanley_druckenmiller_agent,
 )
 
 
 @pytest.mark.integration
-def test_analyze_growth_and_momentum_integration():
+def test_stanley_druckenmiller_agent_integration():
     """
-    Integration test for analyze_growth_and_momentum.
+    Integration test for stanley_druckenmiller_agent.
     Fetches real data for D05.SI (DBS Group Holdings) and verifies the analysis output.
     """
-    ticker = "D05.SI"
+    ticker_to_check = "D05.SI"
+    tickers = ["D05.SI", "C09.SI"]  # DBS Group Holdings and City Developments Limited
 
-    result = analyze_growth_and_momentum(ticker)
+    results = stanley_druckenmiller_agent(tickers)
 
-    assert isinstance(result, dict)
-    assert "score" in result
-    assert "details" in result
+    assert isinstance(results, dict)
+    assert ticker_to_check in results
 
-    # Score should be between 0 and 10
-    assert isinstance(result["score"], (int, float))
-    assert 0 <= result["score"] <= 10
+    analysis = results[ticker_to_check]
 
-    # Details should be a non-empty string explaining the score
-    assert isinstance(result["details"], str)
-    assert len(result["details"]) > 0
+    # Check structure
+    expected_keys = [
+        "signal",
+        "score",
+        "max_score",
+        "growth_momentum_analysis",
+        "risk_reward_analysis",
+    ]
+    for key in expected_keys:
+        assert key in analysis
 
-    # Since D05.SI is a major bank, we expect at least some financial data to be found
-    # and thus the details shouldn't just be "Insufficient financial data..."
-    # unless the API is completely down or data is missing.
-    # We can check for keywords like "growth" or "momentum" or "revenue" in details
-    # to ensure the logic actually ran.
-    keywords = ["growth", "momentum", "revenue", "EPS", "data"]
-    assert any(keyword in result["details"] for keyword in keywords)
+    # Check values
+    assert analysis["max_score"] == 20
+    assert 0 <= analysis["score"] <= 20
+    assert analysis["signal"] in ["Strong Buy", "Buy", "Hold", "Sell"]
+
+    # Check sub-analyses
+    growth = analysis["growth_momentum_analysis"]
+    assert "score" in growth
+    assert "details" in growth
+
+    risk = analysis["risk_reward_analysis"]
+    assert "score" in risk
+    assert "details" in risk
