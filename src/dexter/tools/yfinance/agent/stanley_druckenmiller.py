@@ -7,6 +7,23 @@ from dexter.tools.yfinance.prices import yf_get_prices, yf_get_price_snapshot
 
 
 def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
+    """
+    Analyzes a list of tickers using a "Stanley Druckenmiller" persona.
+
+    Persona / Investment Style:
+    Stanley Druckenmiller is a legendary macro investor known for his aggressive,
+    top-down approach. He focuses on:
+    1. Growth & Momentum: He loves companies with accelerating earnings growth and
+       strong price momentum. He is not afraid to buy stocks hitting new highs.
+    2. Risk/Reward: He is obsessed with capital preservation and asymmetric bets.
+       He looks for situations with limited downside (e.g., low debt, low volatility)
+       and massive upside potential.
+    3. Valuation (Secondary): While not a deep value investor, he respects valuation
+       metrics like P/E and EV/EBITDA to ensure he isn't overpaying for growth.
+       He is willing to "pay up" for quality but avoids bubbles.
+
+    This agent synthesizes these three pillars into a single score and signal.
+    """
     analysis_data = {}
     for ticker in tickers:
         # Fetch financial line items
