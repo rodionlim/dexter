@@ -3,7 +3,7 @@ import statistics
 from datetime import datetime, timedelta
 
 from dexter.tools.yfinance.fundamentals import yf_search_line_items
-from dexter.tools.yfinance.prices import yf_get_prices
+from dexter.tools.yfinance.prices import yf_get_prices, yf_get_price_snapshot
 
 
 def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
@@ -17,6 +17,11 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
                 "earnings_per_share",
                 "total_debt",
                 "shareholders_equity",
+                "net_income",
+                "free_cash_flow",
+                "ebit",
+                "ebitda",
+                "cash_and_equivalents",
             ],
             period="annual",
             limit=4,
@@ -34,36 +39,44 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
                 "end_date": end_date,
             }
         )
+
+        # Fetch market cap
+        snapshot_data = yf_get_price_snapshot.invoke({"tickers": [ticker]})
+        market_cap = snapshot_data.get(ticker, {}).get("snapshot", {}).get("market_cap")
+
         prices = prices_data.get("prices", [])
 
         growth_momentum_analysis = analyze_growth_and_momentum(
             financial_line_items, prices
         )
         risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
+        valuation_analysis = analyze_valuation(financial_line_items, market_cap)
 
-        total_score = growth_momentum_analysis.get(
-            "score", 0
-        ) + risk_reward_analysis.get("score", 0)
-        max_possible_score = 20
+        total_score = (
+            growth_momentum_analysis.get("score", 0)
+            + risk_reward_analysis.get("score", 0)
+            + valuation_analysis.get("score", 0)
+        )
+        max_possible_score = 30
 
-        if total_score >= 14:
+        if total_score >= 22:
             signal = "Strong Buy"
-        elif total_score >= 10:
+        elif total_score >= 16:
             signal = "Buy"
-        elif total_score >= 6:
+        elif total_score >= 10:
             signal = "Hold"
         else:
             signal = "Sell"
 
         analysis_data[ticker] = {
             "signal": signal,
-            "score": total_score,
+            "score": float(f"{total_score:.1f}"),
             "max_score": max_possible_score,
             "growth_momentum_analysis": growth_momentum_analysis,
             "sentiment_analysis": None,
             "insider_activity": None,
             "risk_reward_analysis": risk_reward_analysis,
-            "valuation_analysis": None,
+            "valuation_analysis": valuation_analysis,
         }
 
     return analysis_data
@@ -205,7 +218,7 @@ def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dic
     # Scale to 0–10
     final_score = min(10, (raw_score / 9) * 10)
 
-    return {"score": final_score, "details": "; ".join(details)}
+    return {"score": float(f"{final_score:.2f}"), "details": "; ".join(details)}
 
 
 def analyze_risk_reward(financial_line_items: list, prices: list) -> dict:
@@ -304,4 +317,128 @@ def analyze_risk_reward(financial_line_items: list, prices: list) -> dict:
 
     # raw_score out of 6 => scale to 0–10
     final_score = min(10, (raw_score / 6) * 10)
-    return {"score": final_score, "details": "; ".join(details)}
+    return {"score": float(f"{final_score:.2f}"), "details": "; ".join(details)}
+
+
+def analyze_valuation(financial_line_items: list, market_cap: float | None) -> dict:
+    """
+    Druckenmiller is willing to pay up for growth, but still checks:
+      - P/E
+      - P/FCF
+      - EV/EBIT
+      - EV/EBITDA
+    Each can yield up to 2 points => max 8 raw points => scale to 0–10.
+    """
+    if not financial_line_items or market_cap is None:
+        return {"score": 0, "details": "Insufficient data to perform valuation"}
+
+    details = []
+    raw_score = 0
+
+    # Gather needed data
+    net_incomes = [
+        fi.get("net_income")
+        for fi in financial_line_items
+        if fi.get("net_income") is not None
+    ]
+    fcf_values = [
+        fi.get("free_cash_flow")
+        for fi in financial_line_items
+        if fi.get("free_cash_flow") is not None
+    ]
+    ebit_values = [
+        fi.get("ebit") for fi in financial_line_items if fi.get("ebit") is not None
+    ]
+    ebitda_values = [
+        fi.get("ebitda") for fi in financial_line_items if fi.get("ebitda") is not None
+    ]
+
+    # For EV calculation, let's get the most recent total_debt & cash
+    debt_values = [
+        fi.get("total_debt")
+        for fi in financial_line_items
+        if fi.get("total_debt") is not None
+    ]
+    cash_values = [
+        fi.get("cash_and_equivalents")
+        for fi in financial_line_items
+        if fi.get("cash_and_equivalents") is not None
+    ]
+    recent_debt = debt_values[0] if debt_values else 0
+    recent_cash = cash_values[0] if cash_values else 0
+
+    enterprise_value = market_cap + recent_debt - recent_cash
+
+    # 1) P/E
+    recent_net_income = net_incomes[0] if net_incomes else None
+    if recent_net_income and recent_net_income > 0:
+        pe = market_cap / recent_net_income
+        pe_points = 0
+        if pe < 15:
+            pe_points = 2
+            details.append(f"Attractive P/E: {pe:.2f}")
+        elif pe < 25:
+            pe_points = 1
+            details.append(f"Fair P/E: {pe:.2f}")
+        else:
+            details.append(f"High or Very high P/E: {pe:.2f}")
+        raw_score += pe_points
+    else:
+        details.append("No positive net income for P/E calculation")
+
+    # 2) P/FCF
+    recent_fcf = fcf_values[0] if fcf_values else None
+    if recent_fcf and recent_fcf > 0:
+        pfcf = market_cap / recent_fcf
+        pfcf_points = 0
+        if pfcf < 15:
+            pfcf_points = 2
+            details.append(f"Attractive P/FCF: {pfcf:.2f}")
+        elif pfcf < 25:
+            pfcf_points = 1
+            details.append(f"Fair P/FCF: {pfcf:.2f}")
+        else:
+            details.append(f"High/Very high P/FCF: {pfcf:.2f}")
+        raw_score += pfcf_points
+    else:
+        details.append("No positive free cash flow for P/FCF calculation")
+
+    # 3) EV/EBIT
+    recent_ebit = ebit_values[0] if ebit_values else None
+    if enterprise_value > 0 and recent_ebit and recent_ebit > 0:
+        ev_ebit = enterprise_value / recent_ebit
+        ev_ebit_points = 0
+        if ev_ebit < 15:
+            ev_ebit_points = 2
+            details.append(f"Attractive EV/EBIT: {ev_ebit:.2f}")
+        elif ev_ebit < 25:
+            ev_ebit_points = 1
+            details.append(f"Fair EV/EBIT: {ev_ebit:.2f}")
+        else:
+            details.append(f"High EV/EBIT: {ev_ebit:.2f}")
+        raw_score += ev_ebit_points
+    else:
+        details.append("No valid EV/EBIT because EV <= 0 or EBIT <= 0")
+
+    # 4) EV/EBITDA
+    recent_ebitda = ebitda_values[0] if ebitda_values else None
+    if enterprise_value > 0 and recent_ebitda and recent_ebitda > 0:
+        ev_ebitda = enterprise_value / recent_ebitda
+        ev_ebitda_points = 0
+        if ev_ebitda < 10:
+            ev_ebitda_points = 2
+            details.append(f"Attractive EV/EBITDA: {ev_ebitda:.2f}")
+        elif ev_ebitda < 18:
+            ev_ebitda_points = 1
+            details.append(f"Fair EV/EBITDA: {ev_ebitda:.2f}")
+        else:
+            details.append(f"High EV/EBITDA: {ev_ebitda:.2f}")
+        raw_score += ev_ebitda_points
+    else:
+        details.append("No valid EV/EBITDA because EV <= 0 or EBITDA <= 0")
+
+    # We have up to 2 points for each of the 4 metrics => 8 raw points max
+    # Scale raw_score to 0–10
+    final_score = min(10, (raw_score / 8) * 10)
+
+    return {"score": float(f"{final_score:.2f}"), "details": "; ".join(details)}

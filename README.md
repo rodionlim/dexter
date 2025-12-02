@@ -72,6 +72,12 @@ Switch to FinancialDatasets provider when you need premium data:
 uv run dexter-agent --provider financialdatasets
 ```
 
+Run integration tests to see how investor agents work
+
+```bash
+uv run pytest -s --run-integration
+```
+
 ### Example Queries
 
 Try asking Dexter questions like:

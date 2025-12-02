@@ -1,4 +1,5 @@
 import pytest
+import json
 
 from dexter.tools.yfinance.agent.stanley_druckenmiller import (
     stanley_druckenmiller_agent,
@@ -11,15 +12,19 @@ def test_stanley_druckenmiller_agent_integration():
     Integration test for stanley_druckenmiller_agent.
     Fetches real data for D05.SI (DBS Group Holdings) and verifies the analysis output.
     """
-    ticker_to_check = "D05.SI"
-    tickers = ["D05.SI", "C09.SI"]  # DBS Group Holdings and City Developments Limited
+    ticker = "D05.SI"
+    tickers = ["D05.SI", "GOOGL", "C09.SI"]
 
     results = stanley_druckenmiller_agent(tickers)
 
-    assert isinstance(results, dict)
-    assert ticker_to_check in results
+    print("\n" + "=" * 50)
+    print(json.dumps(results, indent=2))
+    print("=" * 50 + "\n")
 
-    analysis = results[ticker_to_check]
+    assert isinstance(results, dict)
+    assert ticker in results
+
+    analysis = results[ticker]
 
     # Check structure
     expected_keys = [
@@ -28,13 +33,14 @@ def test_stanley_druckenmiller_agent_integration():
         "max_score",
         "growth_momentum_analysis",
         "risk_reward_analysis",
+        "valuation_analysis",
     ]
     for key in expected_keys:
         assert key in analysis
 
     # Check values
-    assert analysis["max_score"] == 20
-    assert 0 <= analysis["score"] <= 20
+    assert analysis["max_score"] == 30
+    assert 0 <= analysis["score"] <= 30
     assert analysis["signal"] in ["Strong Buy", "Buy", "Hold", "Sell"]
 
     # Check sub-analyses
@@ -45,3 +51,7 @@ def test_stanley_druckenmiller_agent_integration():
     risk = analysis["risk_reward_analysis"]
     assert "score" in risk
     assert "details" in risk
+
+    valuation = analysis["valuation_analysis"]
+    assert "score" in valuation
+    assert "details" in valuation

@@ -315,6 +315,7 @@ def yf_search_line_items(
         # Margins are calculated
         "gross_margin": [],
         "operating_margin": [],
+        "ev": [],
     }
 
     for date_idx, row in combined.iterrows():
@@ -340,6 +341,12 @@ def yf_search_line_items(
         total_revenue = get_val(["Total Revenue", "Operating Revenue"])
         gross_profit = get_val(["Gross Profit"])
         operating_income = get_val(["Operating Income"])
+        net_income = get_val(["Net Income", "Net Income Common Stockholders"])
+        interest_expense = get_val(["Interest Expense"])
+        tax_provision = get_val(["Tax Provision"])
+        depreciation_amortization = get_val(
+            ["Reconciled Depreciation", "Depreciation And Amortization"]
+        )
 
         for item in line_items:
             if item in mapping:
@@ -360,6 +367,32 @@ def yf_search_line_items(
                         and total_revenue != 0
                     ):
                         val = operating_income / total_revenue
+                elif item == "ebit":
+                    # Fallback calculation for EBIT: Net Income + Interest + Tax
+                    if val is None:
+                        if (
+                            isinstance(net_income, (int, float))
+                            and isinstance(interest_expense, (int, float))
+                            and isinstance(tax_provision, (int, float))
+                        ):
+                            val = net_income + interest_expense + tax_provision
+                elif item == "ebitda":
+                    # Fallback calculation for EBITDA: EBIT + Depreciation & Amortization
+                    if val is None:
+                        # Try to get EBIT first (either direct or calculated)
+                        ebit_val = get_val(["EBIT"])
+                        if ebit_val is None:
+                            if (
+                                isinstance(net_income, (int, float))
+                                and isinstance(interest_expense, (int, float))
+                                and isinstance(tax_provision, (int, float))
+                            ):
+                                ebit_val = net_income + interest_expense + tax_provision
+
+                        if isinstance(ebit_val, (int, float)) and isinstance(
+                            depreciation_amortization, (int, float)
+                        ):
+                            val = ebit_val + depreciation_amortization
 
                 if val is not None:
                     record[item] = val
