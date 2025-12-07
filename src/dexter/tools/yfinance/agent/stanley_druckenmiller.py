@@ -3,6 +3,7 @@ import statistics
 from datetime import datetime, timedelta
 
 from dexter.tools.yfinance.fundamentals import yf_search_line_items
+from dexter.tools.yfinance.news import yf_get_news
 from dexter.tools.yfinance.prices import yf_get_prices, yf_get_price_snapshot
 from dexter.tools.yfinance.insider import yf_get_insider_trades
 
@@ -59,7 +60,18 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
             ticker=ticker, end_date=end_date, start_date=start_date, limit=50
         )
 
+        # Fetch news
+        company_news = yf_get_news.invoke(
+            {
+                "ticker": ticker,
+                "start_date": start_date,
+                "end_date": end_date,
+                "limit": 50,
+            }
+        )
+
         prices = prices_data.get("prices", [])
+        news_items = company_news.get("news", [])
 
         growth_momentum_analysis = analyze_growth_and_momentum(
             financial_line_items, prices
@@ -67,21 +79,16 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
         risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
         valuation_analysis = analyze_valuation(financial_line_items, market_cap)
         insider_activity = analyze_insider_activity(insider_trades)
-
-        # Placeholder for sentiment analysis
-        sentiment_analysis = {
-            "score": 5,
-            "details": "Sentiment analysis not implemented",
-        }
+        sentiment_analysis = analyze_sentiment(news_items)
 
         # Combine partial scores with weights typical for Druckenmiller:
-        #   35% Growth/Momentum, 20% Risk/Reward, 20% Valuation,
-        #   15% Sentiment, 10% Insider Activity = 100%
+        #   35% Growth/Momentum, 25% Risk/Reward, 20% Valuation,
+        #   10% Sentiment, 10% Insider Activity = 100%
         total_score = (
             growth_momentum_analysis.get("score", 0) * 0.35
-            + risk_reward_analysis.get("score", 0) * 0.20
+            + risk_reward_analysis.get("score", 0) * 0.25
             + valuation_analysis.get("score", 0) * 0.20
-            + sentiment_analysis.get("score", 0) * 0.15
+            + sentiment_analysis.get("score", 0) * 0.10
             + insider_activity.get("score", 0) * 0.10
         )
 
@@ -518,5 +525,46 @@ def analyze_insider_activity(insider_trades: list) -> dict:
         # Low insider buying => -1 => 4
         score = 4
         details.append(f"Mostly insider selling: {buys} buys vs. {sells} sells")
+
+    return {"score": score, "details": "; ".join(details)}
+
+
+def analyze_sentiment(news_items: list) -> dict:
+    """
+    Basic news sentiment: negative keyword check vs. overall volume.
+    """
+    if not news_items:
+        return {"score": 5, "details": "No news data; defaulting to neutral sentiment"}
+
+    negative_keywords = [
+        "lawsuit",
+        "fraud",
+        "negative",
+        "downturn",
+        "decline",
+        "investigation",
+        "recall",
+    ]
+    negative_count = 0
+    for news in news_items:
+        title_lower = (news.get("title") or "").lower()
+        if any(word in title_lower for word in negative_keywords):
+            negative_count += 1
+
+    details = []
+    if negative_count > len(news_items) * 0.3:
+        # More than 30% negative => somewhat bearish => 3/10
+        score = 3
+        details.append(
+            f"High proportion of negative headlines: {negative_count}/{len(news_items)}"
+        )
+    elif negative_count > 0:
+        # Some negativity => 6/10
+        score = 6
+        details.append(f"Some negative headlines: {negative_count}/{len(news_items)}")
+    else:
+        # Mostly positive => 8/10
+        score = 8
+        details.append("Mostly positive/neutral headlines")
 
     return {"score": score, "details": "; ".join(details)}
