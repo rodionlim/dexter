@@ -52,15 +52,15 @@ def run_financial_analysis(
     all_line_items = set()
     for agent in agents:
         all_line_items.update(agent.required_line_items)
-    
+
     # Ensure we have basic items if not requested
     # (Though yf_search_line_items handles this, explicit is better)
-    
+
     results = {}
 
     for ticker in tickers:
         ticker_results = {}
-        
+
         # 1. Fetch Financials
         financial_line_items = yf_search_line_items(
             ticker=ticker,
@@ -113,7 +113,7 @@ def run_financial_analysis(
                 insider_trades=insider_trades,
                 news=news_items,
             )
-        
+
         results[ticker] = ticker_results
 
     return results

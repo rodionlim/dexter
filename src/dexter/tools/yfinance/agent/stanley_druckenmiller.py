@@ -104,14 +104,14 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
     """
     agent = StanleyDruckenmillerAgent()
     results = run_financial_analysis(tickers, [agent])
-    
+
     # Extract the results for this specific agent
     # run_financial_analysis returns {ticker: {agent_name: result}}
     # We want to return {ticker: result} to match previous behavior
     final_results = {}
     for ticker, agent_results in results.items():
         final_results[ticker] = agent_results[agent.name]
-        
+
     return final_results
 
 
