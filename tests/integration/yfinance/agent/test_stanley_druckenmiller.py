@@ -15,7 +15,7 @@ def test_stanley_druckenmiller_agent_integration():
     ticker = "D05.SI"
     tickers = ["QCOM", "D05.SI"]
 
-    results = stanley_druckenmiller_agent(tickers)
+    results = stanley_druckenmiller_agent.invoke({"tickers": tickers})
 
     print("\n" + "=" * 50)
     print(json.dumps(results, indent=2))

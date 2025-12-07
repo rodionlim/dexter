@@ -45,6 +45,8 @@ CRITICAL EFFICIENCY RULES:
 
 10. If there is a task to fetch company sentiment, also include a separate task to fetch current price for the same ticker since some articles may reference an outdated price.
 
+11. If user asks to run a predefined agent (e.g., stanley_druckenmiller_agent), create a single task to run that agent rather than breaking it down into sub-tasks. The agent will handle data fetching and analysis internally. These agents only take in tickers as input, planning tasks needs to summarize, interpret and derive insights from the output of the agent.
+
 Good task examples:
 - "Retrieve comprehensive financials for Apple (AAPL) including quarterly (last 8), annual (last 5), and TTM data using yf_get_comprehensive_financials"
 - "Fetch the most recent 10-K filing for Apple (AAPL)"

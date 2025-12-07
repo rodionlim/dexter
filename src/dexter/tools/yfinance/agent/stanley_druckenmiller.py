@@ -1,85 +1,52 @@
 import statistics
+from typing import Any, Dict, List, Optional
 
-from datetime import datetime, timedelta
+from langchain.tools import tool
 
-from dexter.tools.yfinance.fundamentals import yf_search_line_items
-from dexter.tools.yfinance.news import yf_get_news
-from dexter.tools.yfinance.prices import yf_get_prices, yf_get_price_snapshot
-from dexter.tools.yfinance.insider import yf_get_insider_trades
+from dexter.tools.yfinance.agent.base import BaseFinancialAgent, run_financial_analysis
 
 
-def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
+class StanleyDruckenmillerAgent(BaseFinancialAgent):
     """
     Analyzes stocks using Stanley Druckenmiller's investing principles:
       - Seeking asymmetric risk-reward opportunities
       - Emphasizing growth, momentum, and sentiment
       - Willing to be aggressive if conditions are favorable
       - Focus on preserving capital by avoiding high-risk, low-reward bets
-
-    Returns a bullish/bearish/neutral signal with confidence and reasoning.
     """
-    analysis_data = {}
-    for ticker in tickers:
-        # Fetch financial line items
-        financial_line_items = yf_search_line_items(
-            ticker=ticker,
-            line_items=[
-                "revenue",
-                "earnings_per_share",
-                "total_debt",
-                "shareholders_equity",
-                "net_income",
-                "free_cash_flow",
-                "ebit",
-                "ebitda",
-                "cash_and_equivalents",
-            ],
-            period="annual",
-            limit=4,
-        )
 
-        # Fetch prices
-        end_date = datetime.now().date().isoformat()
-        start_date = (datetime.now() - timedelta(days=365)).date().isoformat()
-        prices_data = yf_get_prices.invoke(
-            {
-                "ticker": ticker,
-                "interval": "day",
-                "interval_multiplier": 1,
-                "start_date": start_date,
-                "end_date": end_date,
-            }
-        )
+    @property
+    def name(self) -> str:
+        return "stanley_druckenmiller"
 
-        # Fetch market cap
-        snapshot_data = yf_get_price_snapshot.invoke({"tickers": [ticker]})
-        market_cap = snapshot_data.get(ticker, {}).get("snapshot", {}).get("market_cap")
+    @property
+    def required_line_items(self) -> List[str]:
+        return [
+            "revenue",
+            "earnings_per_share",
+            "total_debt",
+            "shareholders_equity",
+            "net_income",
+            "free_cash_flow",
+            "ebit",
+            "ebitda",
+            "cash_and_equivalents",
+        ]
 
-        # Fetch insider trades
-        insider_trades = yf_get_insider_trades(
-            ticker=ticker, end_date=end_date, start_date=start_date, limit=50
-        )
-
-        # Fetch news
-        company_news = yf_get_news.invoke(
-            {
-                "ticker": ticker,
-                "start_date": start_date,
-                "end_date": end_date,
-                "limit": 50,
-            }
-        )
-
-        prices = prices_data.get("prices", [])
-        news_items = company_news.get("news", [])
-
-        growth_momentum_analysis = analyze_growth_and_momentum(
-            financial_line_items, prices
-        )
-        risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
-        valuation_analysis = analyze_valuation(financial_line_items, market_cap)
+    def analyze(
+        self,
+        ticker: str,
+        financials: List[Dict[str, Any]],
+        prices: List[Dict[str, Any]],
+        market_cap: Optional[float],
+        insider_trades: List[Dict[str, Any]],
+        news: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        growth_momentum_analysis = analyze_growth_and_momentum(financials, prices)
+        risk_reward_analysis = analyze_risk_reward(financials, prices)
+        valuation_analysis = analyze_valuation(financials, market_cap)
         insider_activity = analyze_insider_activity(insider_trades)
-        sentiment_analysis = analyze_sentiment(news_items)
+        sentiment_analysis = analyze_sentiment(news)
 
         # Combine partial scores with weights typical for Druckenmiller:
         #   35% Growth/Momentum, 25% Risk/Reward, 20% Valuation,
@@ -104,7 +71,7 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
         else:
             signal = "Hold"
 
-        analysis_data[ticker] = {
+        return {
             "signal": signal,
             "score": float(f"{total_score:.1f}"),
             "max_score": max_possible_score,
@@ -115,7 +82,37 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
             "valuation_analysis": valuation_analysis,
         }
 
-    return analysis_data
+
+@tool
+def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
+    """
+    Analyzes a list of tickers using a "Stanley Druckenmiller" persona.
+
+    Persona / Investment Style:
+    Stanley Druckenmiller is a legendary macro investor known for his aggressive,
+    top-down approach. He focuses on:
+    1. Growth & Momentum: He loves companies with accelerating earnings growth and
+       strong price momentum. He is not afraid to buy stocks hitting new highs.
+    2. Risk/Reward: He is obsessed with capital preservation and asymmetric bets.
+       He looks for situations with limited downside (e.g., low debt, low volatility)
+       and massive upside potential.
+    3. Valuation (Secondary): While not a deep value investor, he respects valuation
+       metrics like P/E and EV/EBITDA to ensure he isn't overpaying for growth.
+       He is willing to "pay up" for quality but avoids bubbles.
+
+    This agent synthesizes these three pillars into a single score and signal.
+    """
+    agent = StanleyDruckenmillerAgent()
+    results = run_financial_analysis(tickers, [agent])
+    
+    # Extract the results for this specific agent
+    # run_financial_analysis returns {ticker: {agent_name: result}}
+    # We want to return {ticker: result} to match previous behavior
+    final_results = {}
+    for ticker, agent_results in results.items():
+        final_results[ticker] = agent_results[agent.name]
+        
+    return final_results
 
 
 def analyze_growth_and_momentum(financial_line_items: list, prices: list) -> dict:

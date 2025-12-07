@@ -38,6 +38,7 @@ from dexter.tools.yfinance.prices import yf_get_prices
 from dexter.tools.yfinance.prices import yf_get_price_performance
 from dexter.tools.yfinance.news import yf_get_news
 from dexter.tools.yfinance.estimates import yf_get_analyst_estimates
+from dexter.tools.yfinance.agent.stanley_druckenmiller import stanley_druckenmiller_agent
 
 AVAILABLE_DATA_PROVIDERS = ["financialdatasets", "yfinance"]
 
@@ -85,6 +86,7 @@ TOOLS: dict[str, list[BaseTool]] = {
         yf_get_financial_metrics,
         yf_get_news,
         yf_get_analyst_estimates,
+        stanley_druckenmiller_agent,
     ]
     + tavily_tools,
 }
