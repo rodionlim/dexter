@@ -4,25 +4,18 @@ from datetime import datetime, timedelta
 
 from dexter.tools.yfinance.fundamentals import yf_search_line_items
 from dexter.tools.yfinance.prices import yf_get_prices, yf_get_price_snapshot
+from dexter.tools.yfinance.insider import yf_get_insider_trades
 
 
 def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
     """
-    Analyzes a list of tickers using a "Stanley Druckenmiller" persona.
+    Analyzes stocks using Stanley Druckenmiller's investing principles:
+      - Seeking asymmetric risk-reward opportunities
+      - Emphasizing growth, momentum, and sentiment
+      - Willing to be aggressive if conditions are favorable
+      - Focus on preserving capital by avoiding high-risk, low-reward bets
 
-    Persona / Investment Style:
-    Stanley Druckenmiller is a legendary macro investor known for his aggressive,
-    top-down approach. He focuses on:
-    1. Growth & Momentum: He loves companies with accelerating earnings growth and
-       strong price momentum. He is not afraid to buy stocks hitting new highs.
-    2. Risk/Reward: He is obsessed with capital preservation and asymmetric bets.
-       He looks for situations with limited downside (e.g., low debt, low volatility)
-       and massive upside potential.
-    3. Valuation (Secondary): While not a deep value investor, he respects valuation
-       metrics like P/E and EV/EBITDA to ensure he isn't overpaying for growth.
-       He is willing to "pay up" for quality but avoids bubbles.
-
-    This agent synthesizes these three pillars into a single score and signal.
+    Returns a bullish/bearish/neutral signal with confidence and reasoning.
     """
     analysis_data = {}
     for ticker in tickers:
@@ -61,6 +54,11 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
         snapshot_data = yf_get_price_snapshot.invoke({"tickers": [ticker]})
         market_cap = snapshot_data.get(ticker, {}).get("snapshot", {}).get("market_cap")
 
+        # Fetch insider trades
+        insider_trades = yf_get_insider_trades(
+            ticker=ticker, end_date=end_date, start_date=start_date, limit=50
+        )
+
         prices = prices_data.get("prices", [])
 
         growth_momentum_analysis = analyze_growth_and_momentum(
@@ -68,30 +66,44 @@ def stanley_druckenmiller_agent(tickers: list[str]) -> dict:
         )
         risk_reward_analysis = analyze_risk_reward(financial_line_items, prices)
         valuation_analysis = analyze_valuation(financial_line_items, market_cap)
+        insider_activity = analyze_insider_activity(insider_trades)
 
+        # Placeholder for sentiment analysis
+        sentiment_analysis = {
+            "score": 5,
+            "details": "Sentiment analysis not implemented",
+        }
+
+        # Combine partial scores with weights typical for Druckenmiller:
+        #   35% Growth/Momentum, 20% Risk/Reward, 20% Valuation,
+        #   15% Sentiment, 10% Insider Activity = 100%
         total_score = (
-            growth_momentum_analysis.get("score", 0)
-            + risk_reward_analysis.get("score", 0)
-            + valuation_analysis.get("score", 0)
+            growth_momentum_analysis.get("score", 0) * 0.35
+            + risk_reward_analysis.get("score", 0) * 0.20
+            + valuation_analysis.get("score", 0) * 0.20
+            + sentiment_analysis.get("score", 0) * 0.15
+            + insider_activity.get("score", 0) * 0.10
         )
-        max_possible_score = 30
 
-        if total_score >= 22:
+        max_possible_score = 10
+
+        # Simple bullish/neutral/bearish signal
+        if total_score >= 7.5:
             signal = "Strong Buy"
-        elif total_score >= 16:
+        elif total_score >= 6.0:
             signal = "Buy"
-        elif total_score >= 10:
-            signal = "Hold"
-        else:
+        elif total_score <= 4.0:
             signal = "Sell"
+        else:
+            signal = "Hold"
 
         analysis_data[ticker] = {
             "signal": signal,
             "score": float(f"{total_score:.1f}"),
             "max_score": max_possible_score,
             "growth_momentum_analysis": growth_momentum_analysis,
-            "sentiment_analysis": None,
-            "insider_activity": None,
+            "sentiment_analysis": sentiment_analysis,
+            "insider_activity": insider_activity,
             "risk_reward_analysis": risk_reward_analysis,
             "valuation_analysis": valuation_analysis,
         }
@@ -459,3 +471,52 @@ def analyze_valuation(financial_line_items: list, market_cap: float | None) -> d
     final_score = min(10, (raw_score / 8) * 10)
 
     return {"score": float(f"{final_score:.2f}"), "details": "; ".join(details)}
+
+
+def analyze_insider_activity(insider_trades: list) -> dict:
+    """
+    Simple insider-trade analysis:
+      - If there's heavy insider buying, we nudge the score up.
+      - If there's mostly selling, we reduce it.
+      - Otherwise, neutral.
+    """
+    # Default is neutral (5/10).
+    score = 5
+    details = []
+
+    if not insider_trades:
+        details.append("No insider trades data; defaulting to neutral")
+        return {"score": score, "details": "; ".join(details)}
+
+    buys, sells = 0, 0
+    for trade in insider_trades:
+        # Use transaction_shares to determine if it's a buy or sell
+        # Negative shares = sell, positive shares = buy
+        # Note: yf_get_insider_trades returns dicts, so we use .get()
+        shares = trade.get("transaction_shares")
+        if shares is not None:
+            if shares > 0:
+                buys += 1
+            elif shares < 0:
+                sells += 1
+
+    total = buys + sells
+    if total == 0:
+        details.append("No buy/sell transactions found; neutral")
+        return {"score": score, "details": "; ".join(details)}
+
+    buy_ratio = buys / total
+    if buy_ratio > 0.7:
+        # Heavy buying => +3 points from the neutral 5 => 8
+        score = 8
+        details.append(f"Heavy insider buying: {buys} buys vs. {sells} sells")
+    elif buy_ratio > 0.4:
+        # Moderate buying => +1 => 6
+        score = 6
+        details.append(f"Moderate insider buying: {buys} buys vs. {sells} sells")
+    else:
+        # Low insider buying => -1 => 4
+        score = 4
+        details.append(f"Mostly insider selling: {buys} buys vs. {sells} sells")
+
+    return {"score": score, "details": "; ".join(details)}

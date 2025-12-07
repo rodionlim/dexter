@@ -15,7 +15,6 @@ def yf_get_insider_trades(
     end_date: str,
     start_date: Optional[str] = None,
     limit: int = 1000,
-    api_key: Optional[str] = None,
 ) -> list[dict]:
     """
     Fetch insider trades from Yahoo Finance.
@@ -25,7 +24,6 @@ def yf_get_insider_trades(
         end_date: End date for filtering trades (YYYY-MM-DD).
         start_date: Optional start date for filtering trades (YYYY-MM-DD).
         limit: Maximum number of trades to return.
-        api_key: Unused, kept for compatibility with signature.
 
     Returns:
         List of dictionaries matching the InsiderTrade schema.
@@ -65,7 +63,7 @@ def yf_get_insider_trades(
         end_dt = datetime.now()
         start_dt = None
 
-    for idx, row in trades_df.iterrows():
+    for _, row in trades_df.iterrows():
         # Extract date
         trade_date = None
         if date_col and pd.notna(row.get(date_col)):
@@ -89,6 +87,19 @@ def yf_get_insider_trades(
         shares = to_python(row.get("Shares"))
         value = to_python(row.get("Value"))
         position = str(row.get("Position", ""))
+        text = str(row.get("Text", ""))
+
+        # Adjust shares sign based on transaction type
+        # yfinance 'Shares' is absolute, but 'Text' indicates Sale/Purchase
+        if isinstance(shares, (int, float)):
+            if "Sale" in text:
+                shares = -abs(shares)
+            elif "Purchase" in text:
+                shares = abs(shares)
+            # For other types (Grant, Option Exercise), we might keep as is or handle differently
+            # But for now, let's assume positive unless it's a Sale.
+            # Actually, Grants are usually positive (acquisition).
+            # Option Exercise is acquisition (positive), often followed by sale (negative).
 
         # Calculate price per share if possible
         price_per_share = None

@@ -13,7 +13,7 @@ def test_stanley_druckenmiller_agent_integration():
     Fetches real data for D05.SI (DBS Group Holdings) and verifies the analysis output.
     """
     ticker = "D05.SI"
-    tickers = ["D05.SI", "GOOGL", "C09.SI"]
+    tickers = ["QCOM", "D05.SI"]
 
     results = stanley_druckenmiller_agent(tickers)
 
@@ -39,8 +39,8 @@ def test_stanley_druckenmiller_agent_integration():
         assert key in analysis
 
     # Check values
-    assert analysis["max_score"] == 30
-    assert 0 <= analysis["score"] <= 30
+    assert analysis["max_score"] == 10
+    assert 0 <= analysis["score"] <= 10
     assert analysis["signal"] in ["Strong Buy", "Buy", "Hold", "Sell"]
 
     # Check sub-analyses
@@ -55,3 +55,7 @@ def test_stanley_druckenmiller_agent_integration():
     valuation = analysis["valuation_analysis"]
     assert "score" in valuation
     assert "details" in valuation
+
+    insider = analysis["insider_activity"]
+    assert "score" in insider
+    assert "details" in insider
